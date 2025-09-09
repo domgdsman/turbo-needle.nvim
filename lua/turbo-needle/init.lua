@@ -116,6 +116,18 @@ function M.complete()
 		-- Parse the completion text from API response
 		local completion_text = api.parse_response(result)
 
+		-- Validate completion text
+		if not completion_text or completion_text == "" then
+			utils.notify("Received empty completion from API", vim.log.levels.WARN)
+			return
+		end
+
+		-- Ensure completion_text is a string
+		if type(completion_text) ~= "string" then
+			utils.notify("Invalid completion format received from API", vim.log.levels.ERROR)
+			return
+		end
+
 		-- Set ghost text for the completion
 		M.set_ghost_text(completion_text)
 	end)
@@ -159,6 +171,12 @@ function M.accept_completion()
 		)
 		if extmark and extmark[3] and extmark[3].virt_text then
 			local text = extmark[3].virt_text[1][1]
+			-- Validate text before insertion
+			if not text or text == "" or type(text) ~= "string" then
+				utils.notify("Invalid ghost text format", vim.log.levels.ERROR)
+				M.clear_ghost_text()
+				return "\t" -- Fall back to inserting tab
+			end
 			-- Insert text at cursor
 			vim.api.nvim_put({ text }, "c", false, true)
 			M.clear_ghost_text()
