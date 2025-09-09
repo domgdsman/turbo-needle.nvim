@@ -3,16 +3,39 @@ local utils = require("turbo-needle.utils")
 
 local M = {}
 
--- Debounce timer for completion triggering
-local debounce_timer = nil
+-- Buffer-local state
+local function get_buf_state()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if not M._buf_states then
+		M._buf_states = {}
+	end
+	if not M._buf_states[bufnr] then
+		M._buf_states[bufnr] = {
+			debounce_timer = nil,
+			current_extmark = nil,
+		}
+	end
+	return M._buf_states[bufnr]
+end
 
--- Current ghost text extmark
-local current_extmark = nil
+-- Private config storage
+local _config = config.defaults
 
-M.config = config.defaults
+-- Public getter for config
+function M.get_config()
+	return vim.deepcopy(_config)
+end
 
 function M.setup(opts)
-	M.config = vim.tbl_deep_extend("force", M.config, opts or {})
+	_config = vim.tbl_deep_extend("force", _config, opts or {})
+
+	-- Validate configuration
+	local config_module = require("turbo-needle.config")
+	local success, err = pcall(config_module.validate, _config)
+	if not success then
+		utils.notify("Configuration validation failed: " .. err, vim.log.levels.ERROR)
+		return
+	end
 
 	-- Validate API key configuration
 	local api = require("turbo-needle.api")
@@ -21,18 +44,58 @@ function M.setup(opts)
 	-- Setup completion triggering
 	M.setup_completion_trigger()
 
+	-- Setup keymaps
+	M.setup_keymaps()
+
 	utils.notify("turbo-needle setup complete", vim.log.levels.INFO)
 end
 
 function M.setup_keymaps()
-	if M.config.keymaps.accept and M.config.keymaps.accept ~= "" then
-		vim.keymap.set("i", M.config.keymaps.accept, function()
+	if _config.keymaps.accept and _config.keymaps.accept ~= "" then
+		vim.keymap.set("i", _config.keymaps.accept, function()
 			return M.accept_completion()
 		end, { expr = true, desc = "turbo-needle: accept completion" })
 	end
 end
 
+function M.setup_completion_trigger()
+	local debounce_delay = _config.completions.debounce_ms
 
+	local function trigger_completion()
+		local state = get_buf_state()
+		-- Clear existing ghost text
+		M.clear_ghost_text()
+
+		-- Cancel existing timer
+		if state.debounce_timer then
+			state.debounce_timer:stop()
+			state.debounce_timer = nil
+		end
+
+		-- Start new timer
+		state.debounce_timer = vim.defer_fn(function()
+			M.complete()
+			state.debounce_timer = nil
+		end, debounce_delay)
+	end
+
+	-- Clear timer and ghost text on buffer leave
+	vim.api.nvim_create_autocmd("BufLeave", {
+		callback = function()
+			local state = get_buf_state()
+			if state.debounce_timer then
+				state.debounce_timer:stop()
+				state.debounce_timer = nil
+			end
+			M.clear_ghost_text()
+		end,
+	})
+
+	-- Trigger on insert leave and cursor moved in insert
+	vim.api.nvim_create_autocmd({ "InsertLeave", "CursorMovedI" }, {
+		callback = trigger_completion,
+	})
+end
 
 -- Completion function: extract context and request completion
 function M.complete()
@@ -58,82 +121,52 @@ function M.complete()
 	end)
 end
 
-	-- Setup debounced completion triggering
-function M.setup_completion_trigger()
-	local debounce_delay = M.config.completions.debounce_ms
-
-	local function trigger_completion()
-		-- Clear existing ghost text
-		M.clear_ghost_text()
-
-		-- Cancel existing timer
-		if debounce_timer then
-			debounce_timer:stop()
-			debounce_timer = nil
-		end
-
-		-- Start new timer
-		debounce_timer = vim.defer_fn(function()
-			M.complete()
-			debounce_timer = nil
-		end, debounce_delay)
-	end
-
-	-- Clear timer and ghost text on buffer leave
-	vim.api.nvim_create_autocmd("BufLeave", {
-		callback = function()
-			if debounce_timer then
-				debounce_timer:stop()
-				debounce_timer = nil
-			end
-			M.clear_ghost_text()
-		end,
-	})
-
-	-- Trigger on insert leave and cursor moved in insert
-	vim.api.nvim_create_autocmd({ "InsertLeave", "CursorMovedI" }, {
-		callback = trigger_completion,
-	})
-end
-
 -- Clear ghost text
 function M.clear_ghost_text()
-	if current_extmark then
-		vim.api.nvim_buf_del_extmark(0, current_extmark.ns_id, current_extmark.id)
-		current_extmark = nil
+	local state = get_buf_state()
+	if state.current_extmark then
+		vim.api.nvim_buf_del_extmark(0, state.current_extmark.ns_id, state.current_extmark.id)
+		state.current_extmark = nil
 	end
 end
 
 -- Set ghost text at cursor
 function M.set_ghost_text(text)
+	local state = get_buf_state()
 	M.clear_ghost_text()
 	if text and text ~= "" then
 		local ns_id = vim.api.nvim_create_namespace("turbo-needle-ghost")
 		local cursor = vim.api.nvim_win_get_cursor(0)
-		local row, col = cursor[1] - 1, cursor[2]  -- 0-based
+		local row, col = cursor[1] - 1, cursor[2] -- 0-based
 		local extmark_id = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-			virt_text = {{text, "Comment"}},
-			virt_text_pos = "inline"
+			virt_text = { { text, "Comment" } },
+			virt_text_pos = "inline",
 		})
-		current_extmark = {ns_id = ns_id, id = extmark_id}
+		state.current_extmark = { ns_id = ns_id, id = extmark_id }
 	end
 end
 
 -- Accept completion: insert ghost text if present, else return tab
 function M.accept_completion()
-	if current_extmark then
+	local state = get_buf_state()
+	if state.current_extmark then
 		-- Get the virt_text from extmark
-		local extmark = vim.api.nvim_buf_get_extmark_by_id(0, current_extmark.ns_id, current_extmark.id, {details = true})
+		local extmark = vim.api.nvim_buf_get_extmark_by_id(
+			0,
+			state.current_extmark.ns_id,
+			state.current_extmark.id,
+			{ details = true }
+		)
 		if extmark and extmark[3] and extmark[3].virt_text then
 			local text = extmark[3].virt_text[1][1]
 			-- Insert text at cursor
-			vim.api.nvim_put({text}, "c", false, true)
+			vim.api.nvim_put({ text }, "c", false, true)
 			M.clear_ghost_text()
-			return ""  -- Don't insert tab
+			return "" -- Don't insert tab
 		end
 	end
 	-- No ghost text, insert tab
-	return M.config.keymaps.accept
+	return "\t"
 end
 
 return M

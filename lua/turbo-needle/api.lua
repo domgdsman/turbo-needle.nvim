@@ -5,8 +5,9 @@ M.custom_curl_args_hook = nil
 
 -- Check API key configuration and warn if needed
 function M.validate_api_key_config()
-	local config = require("turbo-needle.config")
-	local api_key_name = config.defaults.api.api_key_name
+	local turbo_needle = require("turbo-needle")
+	local config = turbo_needle.get_config()
+	local api_key_name = config.api.api_key_name
 
 	if api_key_name then
 		local api_key = os.getenv(api_key_name)
@@ -136,28 +137,30 @@ end
 
 -- Main completion request function
 function M.get_completion(prompt_data, callback)
-	local config = require("turbo-needle.config")
+	local turbo_needle = require("turbo-needle")
+	local config = turbo_needle.get_config()
 
 	-- Use custom hook if provided (either from set_curl_args_hook or config.parse_curl_args)
 	local curl_args
-	local custom_hook = M.custom_curl_args_hook or config.defaults.api.parse_curl_args
+	local custom_hook = M.custom_curl_args_hook or config.api.parse_curl_args
 
 	if custom_hook then
-		curl_args = custom_hook(config.defaults.api, prompt_data)
+		curl_args = custom_hook(config.api, prompt_data)
 	else
-		curl_args = M.build_curl_args(config.defaults.api, prompt_data)
+		curl_args = M.build_curl_args(config.api, prompt_data)
 	end
 
 	-- Make the request with retry logic
 	local attempt = 0
-	local max_retries = config.defaults.api.max_retries
+	local max_retries = config.api.max_retries
 
 	local function attempt_request()
 		attempt = attempt + 1
 		M.request_completion(curl_args, function(err, result)
 			if err and attempt <= max_retries then
-				-- Retry on error
-				vim.defer_fn(attempt_request, 1000 * attempt) -- Exponential backoff
+				-- Retry on error with exponential backoff
+				local delay = 1000 * (2 ^ (attempt - 1))
+				vim.defer_fn(attempt_request, delay)
 			else
 				callback(err, result)
 			end

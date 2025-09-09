@@ -123,8 +123,7 @@ describe("turbo-needle.api", function()
 		end)
 
 		it("should warn when api_key_name is set but env var is missing", function()
-			local config = require("turbo-needle.config")
-			local original_defaults = config.defaults
+			local turbo_needle = require("turbo-needle")
 			local original_getenv = os.getenv
 
 			-- Mock missing environment variable
@@ -135,7 +134,8 @@ describe("turbo-needle.api", function()
 				return original_getenv(key)
 			end
 
-			config.defaults = vim.tbl_deep_extend("force", config.defaults, {
+			-- Setup turbo-needle with custom config
+			turbo_needle.setup({
 				api = { api_key_name = "MISSING_API_KEY" },
 			})
 
@@ -160,7 +160,6 @@ describe("turbo-needle.api", function()
 			-- Restore
 			os.getenv = original_getenv
 			utils.notify = original_notify
-			config.defaults = original_defaults
 		end)
 	end)
 
@@ -170,10 +169,10 @@ describe("turbo-needle.api", function()
 				choices = {
 					{
 						message = {
-							content = "completed code"
-						}
-					}
-				}
+							content = "completed code",
+						},
+					},
+				},
 			}
 			local text = api.parse_response(result)
 			assert.are.equal("completed code", text)
@@ -186,10 +185,10 @@ describe("turbo-needle.api", function()
 			text = api.parse_response({})
 			assert.are.equal("", text)
 
-			text = api.parse_response({choices = {}})
+			text = api.parse_response({ choices = {} })
 			assert.are.equal("", text)
 
-			text = api.parse_response({choices = {{message = {}}}})
+			text = api.parse_response({ choices = { { message = {} } } })
 			assert.are.equal("", text)
 		end)
 	end)

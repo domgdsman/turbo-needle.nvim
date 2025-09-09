@@ -5,8 +5,6 @@ describe("turbo-needle.utils", function()
 		it("should have notify function", function()
 			assert.is_function(utils.notify)
 		end)
-
-
 	end)
 
 	describe("utility functions", function()
@@ -24,6 +22,4 @@ describe("turbo-needle.utils", function()
 			assert.are.equal("", utils.trim("   "))
 		end)
 	end)
-
-
 end)
