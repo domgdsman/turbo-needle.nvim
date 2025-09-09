@@ -3,21 +3,74 @@ local utils = require("turbo-needle.utils")
 
 local M = {}
 
-	-- Buffer-local state
-	local function get_buf_state()
-		local bufnr = vim.api.nvim_get_current_buf()
-		if not M._buf_states then
-			M._buf_states = {}
-		end
-		if not M._buf_states[bufnr] then
-			M._buf_states[bufnr] = {
-				debounce_timer = nil,
-				current_extmark = nil,
-				active_request = nil, -- Track active API request
-			}
-		end
-		return M._buf_states[bufnr]
+-- Completion cache
+local completion_cache = {
+	entries = {},
+	max_size = 50,
+	ttl_ms = 2000, -- 2 seconds
+}
+
+-- Buffer-local state
+local function get_buf_state()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if not M._buf_states then
+		M._buf_states = {}
 	end
+	if not M._buf_states[bufnr] then
+		M._buf_states[bufnr] = {
+			debounce_timer = nil,
+			current_extmark = nil,
+			active_request = nil, -- Track active API request
+		}
+	end
+	return M._buf_states[bufnr]
+end
+
+-- Cache management functions
+local function get_cache_key(ctx)
+	-- Create a hash of the prefix (last 100 chars to avoid overly long keys)
+	local prefix = ctx.prefix or ""
+	local key_prefix = prefix:sub(-100)
+	-- Use simple string concatenation instead of sha256 for compatibility
+	return key_prefix .. "|" .. (ctx.suffix or ""):sub(1, 50)
+end
+
+local function get_cached_completion(ctx)
+	local key = get_cache_key(ctx)
+	local entry = completion_cache.entries[key]
+
+	if entry then
+		local current_time = vim.loop.now()
+		if (current_time - entry.timestamp) < completion_cache.ttl_ms then
+			return entry.completion
+		else
+			-- Remove expired entry
+			completion_cache.entries[key] = nil
+		end
+	end
+
+	return nil
+end
+
+local function cache_completion(ctx, completion)
+	local key = get_cache_key(ctx)
+
+	-- Simple cache size management
+	local cache_size = 0
+	for _ in pairs(completion_cache.entries) do
+		cache_size = cache_size + 1
+	end
+
+	if cache_size >= completion_cache.max_size then
+		-- Clear oldest entries (simple approach - clear all)
+		completion_cache.entries = {}
+	end
+
+	completion_cache.entries[key] = {
+		completion = completion,
+		timestamp = vim.loop.now(),
+	}
+end
 
 -- Private config storage
 local _config = config.defaults
@@ -137,6 +190,13 @@ function M.complete()
 	local api = require("turbo-needle.api")
 	local state = get_buf_state()
 
+	-- Check cache first
+	local cached_completion = get_cached_completion(ctx)
+	if cached_completion then
+		M.set_ghost_text(cached_completion)
+		return
+	end
+
 	-- Create a request ID to track this request
 	local request_id = {}
 	state.active_request = request_id
@@ -158,17 +218,18 @@ function M.complete()
 		-- Parse the completion text from API response
 		local completion_text = api.parse_response(result)
 
-		-- Validate completion text
-		if not completion_text or completion_text == "" then
-			utils.notify("Received empty completion from API", vim.log.levels.WARN)
+		-- Validate completion text quality
+		local is_valid, validation_error = utils.validate_completion(completion_text, ctx)
+		if not is_valid then
+			-- Don't show warnings for common cases like empty completions
+			if validation_error ~= "Empty completion" and validation_error ~= "Completion too short" then
+				utils.notify("Completion filtered: " .. validation_error, vim.log.levels.DEBUG)
+			end
 			return
 		end
 
-		-- Ensure completion_text is a string
-		if type(completion_text) ~= "string" then
-			utils.notify("Invalid completion format received from API", vim.log.levels.ERROR)
-			return
-		end
+		-- Cache the valid completion
+		cache_completion(ctx, completion_text)
 
 		-- Set ghost text for the completion
 		M.set_ghost_text(completion_text)
@@ -205,12 +266,8 @@ function M.set_ghost_text(text)
 
 	local row, col = cursor[1] - 1, cursor[2] -- Convert to 0-based
 
-	-- Create namespace and set extmark
+	-- Create namespace
 	local ns_id = vim.api.nvim_create_namespace("turbo-needle-ghost")
-	local extmark_id = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-		virt_text = { { text, "Comment" } },
-		virt_text_pos = "inline",
-	})
 
 	-- Handle multi-line text
 	if text:find("\n") then
@@ -243,25 +300,44 @@ function M.set_ghost_text(text)
 		end
 		state.current_extmark = { ns_id = ns_id, id = singleline_extmark_id }
 	end
-
-	state.current_extmark = { ns_id = ns_id, id = extmark_id }
 end
 
 -- Accept completion: insert ghost text if present, else return tab
 function M.accept_completion()
 	local state = get_buf_state()
 	if state.current_extmark then
-		-- Get the virt_text from extmark
+		-- Get the extmark details
 		local extmark = vim.api.nvim_buf_get_extmark_by_id(
 			0,
 			state.current_extmark.ns_id,
 			state.current_extmark.id,
 			{ details = true }
 		)
-		if extmark and extmark[3] and extmark[3].virt_text then
-			local text = extmark[3].virt_text[1][1]
-			if text and text ~= "" then
-				vim.api.nvim_put({ text }, "c", false, true)
+
+		if extmark and extmark[3] then
+			local details = extmark[3]
+			local text_to_insert = nil
+
+			-- Handle multi-line completion (virt_lines)
+			if details.virt_lines then
+				local lines = {}
+				for _, line_parts in ipairs(details.virt_lines) do
+					if line_parts[1] then
+						table.insert(lines, line_parts[1][1] or "")
+					else
+						table.insert(lines, "")
+					end
+				end
+				text_to_insert = table.concat(lines, "\n")
+			-- Handle single-line completion (virt_text)
+			elseif details.virt_text and details.virt_text[1] then
+				text_to_insert = details.virt_text[1][1]
+			end
+
+			if text_to_insert and text_to_insert ~= "" then
+				-- Split into lines for proper insertion
+				local lines = vim.split(text_to_insert, "\n", { plain = true })
+				vim.api.nvim_put(lines, "c", false, true)
 				M.clear_ghost_text()
 				return "" -- Don't insert tab
 			end

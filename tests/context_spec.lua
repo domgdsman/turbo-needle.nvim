@@ -88,8 +88,8 @@ describe("turbo-needle.context", function()
 				return 1
 			end
 			vim.api.nvim_win_get_cursor = function()
-				return { 1, 6 }
-			end -- 0-based: line 1, col 6
+				return { 2, 6 }
+			end -- 1-based: line 2, col 6 (0-based)
 			vim.api.nvim_buf_get_lines = function(bufnr, start, end_, strict)
 				return test_lines
 			end

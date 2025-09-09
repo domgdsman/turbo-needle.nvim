@@ -22,4 +22,54 @@ describe("turbo-needle.utils", function()
 			assert.are.equal("", utils.trim("   "))
 		end)
 	end)
+
+	describe("completion validation", function()
+		it("should validate good completions", function()
+			local valid, err = utils.validate_completion("function test() {")
+			assert.is_true(valid)
+			assert.is_nil(err)
+		end)
+
+		it("should reject empty completions", function()
+			local valid, err = utils.validate_completion("")
+			assert.is_false(valid)
+			assert.are.equal("Empty completion", err)
+
+			local valid2, err2 = utils.validate_completion("   ")
+			assert.is_false(valid2)
+			assert.are.equal("Empty completion", err2)
+		end)
+
+		it("should reject invalid types", function()
+			local valid, err = utils.validate_completion(nil)
+			assert.is_false(valid)
+			assert.are.equal("Invalid completion format", err)
+
+			local valid2, err2 = utils.validate_completion(123)
+			assert.is_false(valid2)
+			assert.are.equal("Invalid completion format", err2)
+		end)
+
+		it("should reject too short completions", function()
+			local valid, err = utils.validate_completion("x")
+			assert.is_false(valid)
+			assert.are.equal("Completion too short", err)
+		end)
+
+		it("should reject too long completions", function()
+			local long_completion = string.rep("a", 1001)
+			local valid, err = utils.validate_completion(long_completion)
+			assert.is_false(valid)
+			assert.are.equal("Completion too long", err)
+		end)
+
+		it("should detect duplicate lines", function()
+			local context = {
+				prefix = "function test() {\n    console.log('hello')",
+			}
+			local valid, err = utils.validate_completion("console.log('hello')", context)
+			assert.is_false(valid)
+			assert.are.equal("Duplicate line completion", err)
+		end)
+	end)
 end)
