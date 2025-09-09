@@ -8,20 +8,19 @@ M.config = config.defaults
 function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", M.config, opts or {})
 
-	if M.config.keymaps.enabled then
-		M.setup_keymaps()
-	end
+	-- Validate API key configuration
+	local api = require("turbo-needle.api")
+	api.validate_api_key_config()
 
 	utils.notify("turbo-needle setup complete", vim.log.levels.INFO)
 end
 
 function M.setup_keymaps()
-	for action, keymap in pairs(M.config.keymaps.mappings) do
-		if keymap ~= "" then
-			vim.keymap.set("n", keymap, function()
-				M[action]()
-			end, { desc = "turbo-needle: " .. action })
-		end
+	if M.config.keymaps.accept and M.config.keymaps.accept ~= "" then
+		vim.keymap.set("i", M.config.keymaps.accept, function()
+			-- TODO: Implement completion acceptance
+			return M.config.keymaps.accept
+		end, { desc = "turbo-needle: accept completion" })
 	end
 end
 
