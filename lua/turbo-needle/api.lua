@@ -12,12 +12,13 @@ function M.validate_api_key_config()
 		local api_key = os.getenv(api_key_name)
 		if not api_key or api_key == "" then
 			local utils = require("turbo-needle.utils")
-			utils.warn(
+			utils.notify(
 				string.format(
 					"API key environment variable '%s' is not set or empty. " .. "Set it with: export %s='your-api-key'",
 					api_key_name,
 					api_key_name
-				)
+				),
+				vim.log.levels.WARN
 			)
 		end
 	end
@@ -48,11 +49,12 @@ function M.build_curl_args(provider_opts, code_opts)
 			headers["Authorization"] = "Bearer " .. api_key
 		else
 			local utils = require("turbo-needle.utils")
-			utils.warn(
+			utils.notify(
 				string.format(
 					"API key for '%s' not found in environment. " .. "Request will be sent without authorization.",
 					provider_opts.api_key_name
-				)
+				),
+				vim.log.levels.WARN
 			)
 		end
 	end

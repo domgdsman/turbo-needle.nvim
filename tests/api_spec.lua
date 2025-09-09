@@ -139,24 +139,27 @@ describe("turbo-needle.api", function()
 				api = { api_key_name = "MISSING_API_KEY" },
 			})
 
-			-- Mock utils.warn to capture the warning
+			-- Mock utils.notify to capture the warning
 			local utils = require("turbo-needle.utils")
-			local original_warn = utils.warn
-			local warning_called = false
-			local warning_message = ""
-			utils.warn = function(msg)
-				warning_called = true
-				warning_message = msg
+			local original_notify = utils.notify
+			local notify_called = false
+			local notify_message = ""
+			local notify_level = nil
+			utils.notify = function(msg, level)
+				notify_called = true
+				notify_message = msg
+				notify_level = level
 			end
 
 			api.validate_api_key_config()
 
-			assert.is_true(warning_called)
-			assert.is_not_nil(string.find(warning_message, "MISSING_API_KEY"))
+			assert.is_true(notify_called)
+			assert.is_not_nil(string.find(notify_message, "MISSING_API_KEY"))
+			assert.are.equal(notify_level, vim.log.levels.WARN)
 
 			-- Restore
 			os.getenv = original_getenv
-			utils.warn = original_warn
+			utils.notify = original_notify
 			config.defaults = original_defaults
 		end)
 	end)

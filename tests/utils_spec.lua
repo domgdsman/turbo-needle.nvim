@@ -6,21 +6,7 @@ describe("turbo-needle.utils", function()
 			assert.is_function(utils.notify)
 		end)
 
-		it("should have error function", function()
-			assert.is_function(utils.error)
-		end)
 
-		it("should have warn function", function()
-			assert.is_function(utils.warn)
-		end)
-
-		it("should have info function", function()
-			assert.is_function(utils.info)
-		end)
-
-		it("should have debug function", function()
-			assert.is_function(utils.debug)
-		end)
 	end)
 
 	describe("utility functions", function()

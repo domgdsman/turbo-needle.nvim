@@ -46,7 +46,7 @@ function M.complete()
 
 	api.get_completion({ prefix = ctx.prefix, suffix = ctx.suffix }, function(err, result)
 		if err then
-			utils.error("Completion error: " .. err)
+			utils.notify("Completion error: " .. err, vim.log.levels.ERROR)
 			return
 		end
 
