@@ -1,0 +1,41 @@
+# Neovim
+*.tmp
+*.swp
+*.swo
+*~
+
+# Lua
+luac.out
+
+# Log files
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# Testing
+/tmp/
+.luacov
+luacov.*.out
+
+# Dependencies (if using any package manager)
+lua_modules/
+.luarocks/
+
+# Documentation generation
+doc/tags
+
+# Development
+.stylua.toml
+.luacheckrc
