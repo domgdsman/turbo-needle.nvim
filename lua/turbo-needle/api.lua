@@ -161,4 +161,13 @@ function M.get_completion(prompt_data, callback)
 	attempt_request()
 end
 
+-- Parse API response to extract completion text
+function M.parse_response(result)
+	local completion_text = ""
+	if result and result.choices and result.choices[1] and result.choices[1].message then
+		completion_text = result.choices[1].message.content or ""
+	end
+	return completion_text
+end
+
 return M

@@ -6,15 +6,8 @@ vim.g.loaded_turbo_needle = 1
 
 local turbo_needle = require('turbo-needle')
 
-vim.api.nvim_create_user_command('TurboNeedle', function(opts)
-  turbo_needle.run(opts.args)
-end, {
-  nargs = '*',
-  desc = 'Run turbo-needle plugin'
-})
-
 vim.api.nvim_create_user_command('TurboNeedleSetup', function()
-  turbo_needle.setup()
+   turbo_needle.setup()
 end, {
-  desc = 'Setup turbo-needle plugin with default configuration'
+   desc = 'Setup turbo-needle plugin with default configuration'
 })

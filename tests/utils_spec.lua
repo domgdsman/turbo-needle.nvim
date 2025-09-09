@@ -39,17 +39,5 @@ describe("turbo-needle.utils", function()
 		end)
 	end)
 
-	describe("buffer and window functions", function()
-		it("should have create_buf function", function()
-			assert.is_function(utils.create_buf)
-		end)
 
-		it("should have create_win function", function()
-			assert.is_function(utils.create_win)
-		end)
-
-		it("should have close_win function", function()
-			assert.is_function(utils.close_win)
-		end)
-	end)
 end)

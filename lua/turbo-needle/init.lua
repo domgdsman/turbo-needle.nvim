@@ -3,6 +3,12 @@ local utils = require("turbo-needle.utils")
 
 local M = {}
 
+-- Debounce timer for completion triggering
+local debounce_timer = nil
+
+-- Current ghost text extmark
+local current_extmark = nil
+
 M.config = config.defaults
 
 function M.setup(opts)
@@ -12,32 +18,126 @@ function M.setup(opts)
 	local api = require("turbo-needle.api")
 	api.validate_api_key_config()
 
+	-- Setup completion triggering
+	M.setup_completion_trigger()
+
 	utils.notify("turbo-needle setup complete", vim.log.levels.INFO)
 end
 
 function M.setup_keymaps()
 	if M.config.keymaps.accept and M.config.keymaps.accept ~= "" then
 		vim.keymap.set("i", M.config.keymaps.accept, function()
-			-- TODO: Implement completion acceptance
-			return M.config.keymaps.accept
-		end, { desc = "turbo-needle: accept completion" })
+			return M.accept_completion()
+		end, { expr = true, desc = "turbo-needle: accept completion" })
 	end
 end
 
-function M.run(args)
-	utils.notify("Running turbo-needle with args: " .. (args or "none"), vim.log.levels.INFO)
+
+
+-- Completion function: extract context and request completion
+function M.complete()
+	if not M.config.completions.enabled then
+		return
+	end
+
+	local context = require("turbo-needle.context")
+	if not context.is_filetype_supported() then
+		return
+	end
+
+	local ctx = context.get_current_context()
+	local api = require("turbo-needle.api")
+
+	api.get_completion({ prefix = ctx.prefix, suffix = ctx.suffix }, function(err, result)
+		if err then
+			utils.error("Completion error: " .. err)
+			return
+		end
+
+		-- Parse the completion text from API response
+		local completion_text = api.parse_response(result)
+
+		-- Set ghost text for the completion
+		M.set_ghost_text(completion_text)
+	end)
 end
 
-function M.toggle()
-	utils.notify("Toggle functionality not yet implemented", vim.log.levels.WARN)
+	-- Setup debounced completion triggering
+function M.setup_completion_trigger()
+	local debounce_delay = M.config.completions.debounce_ms
+
+	local function trigger_completion()
+		-- Clear existing ghost text
+		M.clear_ghost_text()
+
+		-- Cancel existing timer
+		if debounce_timer then
+			debounce_timer:stop()
+			debounce_timer = nil
+		end
+
+		-- Start new timer
+		debounce_timer = vim.defer_fn(function()
+			M.complete()
+			debounce_timer = nil
+		end, debounce_delay)
+	end
+
+	-- Clear timer and ghost text on buffer leave
+	vim.api.nvim_create_autocmd("BufLeave", {
+		callback = function()
+			if debounce_timer then
+				debounce_timer:stop()
+				debounce_timer = nil
+			end
+			M.clear_ghost_text()
+		end,
+	})
+
+	-- Trigger on insert leave and cursor moved in insert
+	vim.api.nvim_create_autocmd({ "InsertLeave", "CursorMovedI" }, {
+		callback = trigger_completion,
+	})
 end
 
-function M.open()
-	utils.notify("Open functionality not yet implemented", vim.log.levels.WARN)
+-- Clear ghost text
+function M.clear_ghost_text()
+	if current_extmark then
+		vim.api.nvim_buf_del_extmark(0, current_extmark.ns_id, current_extmark.id)
+		current_extmark = nil
+	end
 end
 
-function M.close()
-	utils.notify("Close functionality not yet implemented", vim.log.levels.WARN)
+-- Set ghost text at cursor
+function M.set_ghost_text(text)
+	M.clear_ghost_text()
+	if text and text ~= "" then
+		local ns_id = vim.api.nvim_create_namespace("turbo-needle-ghost")
+		local cursor = vim.api.nvim_win_get_cursor(0)
+		local row, col = cursor[1] - 1, cursor[2]  -- 0-based
+		local extmark_id = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
+			virt_text = {{text, "Comment"}},
+			virt_text_pos = "inline"
+		})
+		current_extmark = {ns_id = ns_id, id = extmark_id}
+	end
+end
+
+-- Accept completion: insert ghost text if present, else return tab
+function M.accept_completion()
+	if current_extmark then
+		-- Get the virt_text from extmark
+		local extmark = vim.api.nvim_buf_get_extmark_by_id(0, current_extmark.ns_id, current_extmark.id, {details = true})
+		if extmark and extmark[3] and extmark[3].virt_text then
+			local text = extmark[3].virt_text[1][1]
+			-- Insert text at cursor
+			vim.api.nvim_put({text}, "c", false, true)
+			M.clear_ghost_text()
+			return ""  -- Don't insert tab
+		end
+	end
+	-- No ghost text, insert tab
+	return M.config.keymaps.accept
 end
 
 return M

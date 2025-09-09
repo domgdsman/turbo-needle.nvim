@@ -160,4 +160,34 @@ describe("turbo-needle.api", function()
 			config.defaults = original_defaults
 		end)
 	end)
+
+	describe("parse_response", function()
+		it("should parse completion text from valid response", function()
+			local result = {
+				choices = {
+					{
+						message = {
+							content = "completed code"
+						}
+					}
+				}
+			}
+			local text = api.parse_response(result)
+			assert.are.equal("completed code", text)
+		end)
+
+		it("should return empty string for invalid response", function()
+			local text = api.parse_response(nil)
+			assert.are.equal("", text)
+
+			text = api.parse_response({})
+			assert.are.equal("", text)
+
+			text = api.parse_response({choices = {}})
+			assert.are.equal("", text)
+
+			text = api.parse_response({choices = {{message = {}}}})
+			assert.are.equal("", text)
+		end)
+	end)
 end)
