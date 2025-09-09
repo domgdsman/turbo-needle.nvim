@@ -125,7 +125,11 @@ function M.request_completion(curl_args, callback)
 				callback("Invalid JSON response", nil)
 			end
 		else
-			callback("HTTP error: " .. obj.code, nil)
+			local error_msg = "HTTP error: " .. obj.code
+			if obj.stderr and obj.stderr ~= "" then
+				error_msg = error_msg .. " - " .. obj.stderr:match("^%s*(.-)%s*$")
+			end
+			callback(error_msg, nil)
 		end
 	end)
 end
