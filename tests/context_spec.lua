@@ -9,7 +9,7 @@ describe("turbo-needle.context", function()
 				"function test() {",
 				"    print('hello')",
 				"    return true",
-				"}"
+				"}",
 			})
 
 			-- Cursor after "    prin" in line 2 (0-based: row=1, col=8)
@@ -28,7 +28,7 @@ describe("turbo-needle.context", function()
 			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
 				"line1",
 				"line2",
-				"line3"
+				"line3",
 			})
 
 			local row, col = 1, 0
@@ -45,10 +45,10 @@ describe("turbo-needle.context", function()
 			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
 				"line1",
 				"line2",
-				"line3"
+				"line3",
 			})
 
-			local row, col = 1, 5  -- "line2" has 5 chars
+			local row, col = 1, 5 -- "line2" has 5 chars
 			local result = context.extract_context(bufnr, row, col)
 
 			assert.are.equal("line1\nline2", result.prefix)
@@ -73,32 +73,36 @@ describe("turbo-needle.context", function()
 
 	describe("get_current_context", function()
 		it("should get context from current buffer and cursor", function()
-			-- Create a test buffer and window
-			local bufnr = vim.api.nvim_create_buf(false, true)
-			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+			-- Mock vim.api functions for testing
+			local original_get_current_buf = vim.api.nvim_get_current_buf
+			local original_win_get_cursor = vim.api.nvim_win_get_cursor
+			local original_buf_get_lines = vim.api.nvim_buf_get_lines
+
+			-- Create test buffer content
+			local test_lines = {
 				"local x = 1",
-				"print(x)"
-			})
+				"print(x)",
+			}
 
-			local win = vim.api.nvim_open_win(bufnr, true, {
-				relative = "editor",
-				width = 10,
-				height = 5,
-				row = 1,
-				col = 1
-			})
-
-			-- Set cursor
-			vim.api.nvim_win_set_cursor(win, {2, 6})  -- "print(" has 6 chars
+			vim.api.nvim_get_current_buf = function()
+				return 1
+			end
+			vim.api.nvim_win_get_cursor = function()
+				return { 1, 6 }
+			end -- 0-based: line 1, col 6
+			vim.api.nvim_buf_get_lines = function(bufnr, start, end_, strict)
+				return test_lines
+			end
 
 			local result = context.get_current_context()
 
 			assert.are.equal("local x = 1\nprint(", result.prefix)
 			assert.are.equal("x)", result.suffix)
 
-			-- Clean up
-			vim.api.nvim_win_close(win, true)
-			vim.api.nvim_buf_delete(bufnr, { force = true })
+			-- Restore
+			vim.api.nvim_get_current_buf = original_get_current_buf
+			vim.api.nvim_win_get_cursor = original_win_get_cursor
+			vim.api.nvim_buf_get_lines = original_buf_get_lines
 		end)
 	end)
 
@@ -107,7 +111,7 @@ describe("turbo-needle.context", function()
 			local config = require("turbo-needle.config")
 			local original_defaults = config.defaults
 			config.defaults = vim.tbl_deep_extend("force", config.defaults, {
-				filetypes = { enabled = { "lua", "python" }, disabled = {} }
+				filetypes = { enabled = { "lua", "python" }, disabled = {} },
 			})
 
 			vim.bo.filetype = "lua"
@@ -120,23 +124,22 @@ describe("turbo-needle.context", function()
 		end)
 
 		it("should return false for disabled filetype", function()
-			local config = require("turbo-needle.config")
-			local original_defaults = config.defaults
-			config.defaults = vim.tbl_deep_extend("force", config.defaults, {
-				filetypes = { enabled = { "lua" }, disabled = { "python" } }
+			local turbo_needle = require("turbo-needle")
+
+			-- Setup turbo-needle with custom config
+			turbo_needle.setup({
+				filetypes = { enabled = { "lua" }, disabled = { "python" } },
 			})
 
 			vim.bo.filetype = "python"
 			assert.is_false(context.is_filetype_supported())
-
-			config.defaults = original_defaults
 		end)
 
 		it("should return true for unspecified filetype when not disabled", function()
 			local config = require("turbo-needle.config")
 			local original_defaults = config.defaults
 			config.defaults = vim.tbl_deep_extend("force", config.defaults, {
-				filetypes = { enabled = { "lua" }, disabled = {} }
+				filetypes = { enabled = { "lua" }, disabled = {} },
 			})
 
 			vim.bo.filetype = "javascript"

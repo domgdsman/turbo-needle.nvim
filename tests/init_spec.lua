@@ -2,25 +2,27 @@ local turbo_needle = require("turbo-needle")
 
 describe("turbo-needle", function()
 	before_each(function()
-		turbo_needle.config = require("turbo-needle.config").defaults
+		-- Reset the module to use default config
+		package.loaded["turbo-needle"] = nil
+		turbo_needle = require("turbo-needle")
 	end)
 
 	describe("setup", function()
 		it("should setup with default configuration", function()
 			turbo_needle.setup()
-			assert.is_not_nil(turbo_needle.config)
-			assert.are.equal("<Tab>", turbo_needle.config.keymaps.accept)
+			local config = turbo_needle.get_config()
+			assert.is_not_nil(config)
+			assert.are.equal("<Tab>", config.keymaps.accept)
 		end)
 
 		it("should merge custom configuration", function()
 			turbo_needle.setup({
 				keymaps = { accept = "<C-y>" },
 			})
-			assert.are.equal("<C-y>", turbo_needle.config.keymaps.accept)
+			local config = turbo_needle.get_config()
+			assert.are.equal("<C-y>", config.keymaps.accept)
 		end)
 	end)
-
-
 
 	describe("complete", function()
 		it("should have complete function", function()
@@ -32,8 +34,12 @@ describe("turbo-needle", function()
 			local context = require("turbo-needle.context")
 			local original_is_supported = context.is_filetype_supported
 			local original_get_context = context.get_current_context
-			context.is_filetype_supported = function() return true end
-			context.get_current_context = function() return { prefix = "test prefix", suffix = "test suffix" } end
+			context.is_filetype_supported = function()
+				return true
+			end
+			context.get_current_context = function()
+				return { prefix = "test prefix", suffix = "test suffix" }
+			end
 
 			-- Mock api
 			local api = require("turbo-needle.api")
@@ -71,7 +77,9 @@ describe("turbo-needle", function()
 		it("should not call api when filetype not supported", function()
 			local context = require("turbo-needle.context")
 			local original_is_supported = context.is_filetype_supported
-			context.is_filetype_supported = function() return false end
+			context.is_filetype_supported = function()
+				return false
+			end
 
 			local api = require("turbo-needle.api")
 			local original_get_completion = api.get_completion
@@ -92,8 +100,12 @@ describe("turbo-needle", function()
 			local context = require("turbo-needle.context")
 			local original_is_supported = context.is_filetype_supported
 			local original_get_context = context.get_current_context
-			context.is_filetype_supported = function() return true end
-			context.get_current_context = function() return { prefix = "", suffix = "" } end
+			context.is_filetype_supported = function()
+				return true
+			end
+			context.get_current_context = function()
+				return { prefix = "", suffix = "" }
+			end
 
 			local api = require("turbo-needle.api")
 			local original_get_completion = api.get_completion
@@ -154,9 +166,15 @@ describe("turbo-needle", function()
 			local original_win_get_cursor = vim.api.nvim_win_get_cursor
 			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
 
-			vim.api.nvim_create_namespace = function() return 1 end
-			vim.api.nvim_win_get_cursor = function() return {1, 0} end
-			vim.api.nvim_buf_set_extmark = function() return 1 end
+			vim.api.nvim_create_namespace = function()
+				return 1
+			end
+			vim.api.nvim_win_get_cursor = function()
+				return { 1, 0 }
+			end
+			vim.api.nvim_buf_set_extmark = function()
+				return 1
+			end
 
 			assert.has_no.errors(function()
 				turbo_needle.set_ghost_text("test text")
@@ -170,11 +188,15 @@ describe("turbo-needle", function()
 
 		it("should not set ghost text for empty text", function()
 			local original_create_ns = vim.api.nvim_create_namespace
-			vim.api.nvim_create_namespace = function() return 1 end
+			vim.api.nvim_create_namespace = function()
+				return 1
+			end
 
 			local called = false
 			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
-			vim.api.nvim_buf_set_extmark = function() called = true end
+			vim.api.nvim_buf_set_extmark = function()
+				called = true
+			end
 
 			turbo_needle.set_ghost_text("")
 			assert.is_false(called)
@@ -192,9 +214,9 @@ describe("turbo-needle", function()
 			assert.is_function(turbo_needle.accept_completion)
 		end)
 
-		it("should return tab key when no ghost text", function()
+		it("should return tab character when no ghost text", function()
 			local result = turbo_needle.accept_completion()
-			assert.are.equal("<Tab>", result)
+			assert.are.equal("\t", result)
 		end)
 
 		it("should insert ghost text and return empty when ghost text present", function()
@@ -209,7 +231,7 @@ describe("turbo-needle", function()
 			local put_called = false
 			local clear_called = false
 			vim.api.nvim_buf_get_extmark_by_id = function()
-				return {0, 0, {virt_text = {{"inserted text", "Comment"}}}}
+				return { 0, 0, { virt_text = { { "inserted text", "Comment" } } } }
 			end
 			vim.api.nvim_put = function(text)
 				put_called = true

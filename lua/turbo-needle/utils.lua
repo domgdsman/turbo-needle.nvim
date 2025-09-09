@@ -8,7 +8,6 @@ function M.notify(msg, level)
 	end)
 end
 
-
 function M.is_empty(value)
 	if value == nil then
 		return true
