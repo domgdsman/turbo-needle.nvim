@@ -19,10 +19,12 @@ local CACHE_TTL_MS = 100 -- Cache validity time
 function M.extract_context(bufnr, cursor_row, cursor_col)
 	-- Check cache first
 	local current_time = vim.loop.now()
-	if context_cache.bufnr == bufnr and
-	   context_cache.cursor_row == cursor_row and
-	   context_cache.cursor_col == cursor_col and
-	   (current_time - context_cache.timestamp) < CACHE_TTL_MS then
+	if
+		context_cache.bufnr == bufnr
+		and context_cache.cursor_row == cursor_row
+		and context_cache.cursor_col == cursor_col
+		and (current_time - context_cache.timestamp) < CACHE_TTL_MS
+	then
 		return context_cache.context
 	end
 
@@ -134,7 +136,7 @@ function M.get_current_context()
 		return { prefix = "", suffix = "" }
 	end
 
-	local row, col = cursor[1], cursor[2] -- Both are 0-based
+	local row, col = cursor[1] - 1, cursor[2] -- Convert row to 0-based, col is already 0-based
 
 	return M.extract_context(bufnr, row, col)
 end

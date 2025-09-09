@@ -154,24 +154,34 @@ end
 
 -- Parse API response to extract completion text
 function M.parse_response(result)
+	if not result then
+		return ""
+	end
+
 	local completion_text = ""
-	if result and result.content then
-		-- llama.cpp completion response format
+
+	-- Handle llama.cpp completion response format first
+	if result.content then
 		completion_text = result.content
-	elseif result and result.choices and result.choices[1] and result.choices[1].message then
-		-- OpenAI chat completion response format (fallback)
+	-- Fallback to OpenAI chat completion response format
+	elseif result.choices and result.choices[1] and result.choices[1].message then
 		completion_text = result.choices[1].message.content or ""
+	-- Handle other possible formats
+	elseif result.text then
+		completion_text = result.text
+	elseif result.completion then
+		completion_text = result.completion
 	end
 
 	-- Handle escape sequences in the completion text
 	if completion_text and completion_text ~= "" then
 		completion_text = completion_text:gsub("\\n", "\n")
 		completion_text = completion_text:gsub("\\t", "\t")
-		completion_text = completion_text:gsub("\\\"", "\"")
+		completion_text = completion_text:gsub('\\"', '"')
 		completion_text = completion_text:gsub("\\\\", "\\")
 	end
 
-	return completion_text
+	return completion_text or ""
 end
 
 return M
