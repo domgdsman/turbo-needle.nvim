@@ -11,7 +11,8 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 		return { prefix = "", suffix = "" }
 	end
 
-	-- Convert 0-based cursor position to 1-based for string operations
+	-- Convert cursor position to 1-based for string operations
+	-- cursor_row is 0-based, cursor_col is 0-based
 	local cursor_line_1based = cursor_row + 1
 	local cursor_col_1based = cursor_col + 1
 
@@ -30,10 +31,12 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 	if cursor_line_1based <= total_lines then
 		local current_line = all_lines[cursor_line_1based]
 		if cursor_col_1based > 1 then
-			-- Extract substring up to cursor column
+			-- Extract substring up to cursor column (cursor in middle of line)
 			local prefix_part = string.sub(current_line, 1, cursor_col_1based - 1)
 			prefix = prefix .. prefix_part
 		end
+		-- Note: When cursor is at column 0, don't add current line to prefix
+		-- The current line will be handled in the suffix extraction
 	end
 
 	-- Extract suffix: all content after cursor
@@ -45,6 +48,10 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 			-- Extract substring from cursor column to end of line
 			local suffix_part = string.sub(current_line, cursor_col_1based)
 			table.insert(suffix_lines, suffix_part)
+			has_suffix_part = true
+		else
+			-- Cursor beyond line length, add empty string to maintain line structure
+			table.insert(suffix_lines, "")
 			has_suffix_part = true
 		end
 	end
@@ -74,7 +81,7 @@ function M.get_current_context()
 		return { prefix = "", suffix = "" }
 	end
 
-	local row, col = cursor[1], cursor[2] -- Already 0-based
+	local row, col = cursor[1], cursor[2] -- Both are 0-based
 
 	return M.extract_context(bufnr, row, col)
 end
