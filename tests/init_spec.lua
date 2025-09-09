@@ -9,14 +9,14 @@ describe("turbo-needle", function()
 		it("should setup with default configuration", function()
 			turbo_needle.setup()
 			assert.is_not_nil(turbo_needle.config)
-			assert.is_true(turbo_needle.config.keymaps.enabled)
+			assert.are.equal("<Tab>", turbo_needle.config.keymaps.accept)
 		end)
 
 		it("should merge custom configuration", function()
 			turbo_needle.setup({
-				keymaps = { enabled = false },
+				keymaps = { accept = "<C-y>" },
 			})
-			assert.is_false(turbo_needle.config.keymaps.enabled)
+			assert.are.equal("<C-y>", turbo_needle.config.keymaps.accept)
 		end)
 	end)
 
