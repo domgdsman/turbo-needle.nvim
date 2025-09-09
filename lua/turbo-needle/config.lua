@@ -12,8 +12,8 @@ M.defaults = {
 		parse_curl_args = nil, -- Optional custom curl args function
 	},
 	completions = {
+		enabled = true,
 		debounce_ms = 300,
-		throttle_ms = 600,
 	},
 	keymaps = {
 		accept = "<Tab>",
