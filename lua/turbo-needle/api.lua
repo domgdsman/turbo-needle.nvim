@@ -152,25 +152,16 @@ function M.get_completion(prompt_data, callback)
 	attempt_request()
 end
 
--- Parse API response to extract completion text
+-- Parse API response to extract completion text (llama.cpp format only)
 function M.parse_response(result)
 	if not result then
 		return ""
 	end
 
+	-- Handle llama.cpp completion response format
 	local completion_text = ""
-
-	-- Handle llama.cpp completion response format first
 	if result.content then
 		completion_text = result.content
-	-- Fallback to OpenAI chat completion response format
-	elseif result.choices and result.choices[1] and result.choices[1].message then
-		completion_text = result.choices[1].message.content or ""
-	-- Handle other possible formats
-	elseif result.text then
-		completion_text = result.text
-	elseif result.completion then
-		completion_text = result.completion
 	end
 
 	-- Handle escape sequences in the completion text

@@ -10,6 +10,13 @@ M.defaults = {
 		timeout = 5000,
 		max_retries = 2,
 		parse_curl_args = nil, -- Optional custom curl args function
+		parse_response = nil, -- Optional custom response parser function
+		-- Example custom parser for different API formats:
+		-- parse_response = function(result)
+		--   if result.content then return result.content end
+		--   if result.choices and result.choices[1] then return result.choices[1].text or "" end
+		--   return ""
+		-- end
 	},
 	completions = {
 		debounce_ms = 300,
@@ -57,6 +64,13 @@ function M.validate(config)
 	if config.api.temperature ~= nil then
 		vim.validate({
 			["api.temperature"] = { config.api.temperature, "number" },
+		})
+	end
+
+	-- Validate parse_response is function when set
+	if config.api.parse_response ~= nil then
+		vim.validate({
+			["api.parse_response"] = { config.api.parse_response, "function" },
 		})
 	end
 

@@ -160,15 +160,9 @@ describe("turbo-needle.api", function()
 	end)
 
 	describe("parse_response", function()
-		it("should parse completion text from valid response", function()
+		it("should parse completion text from valid llama.cpp response", function()
 			local result = {
-				choices = {
-					{
-						message = {
-							content = "completed code",
-						},
-					},
-				},
+				content = "completed code",
 			}
 			local text = api.parse_response(result)
 			assert.are.equal("completed code", text)
@@ -184,7 +178,7 @@ describe("turbo-needle.api", function()
 			text = api.parse_response({ choices = {} })
 			assert.are.equal("", text)
 
-			text = api.parse_response({ choices = { { message = {} } } })
+			text = api.parse_response({ text = "some text" })
 			assert.are.equal("", text)
 		end)
 	end)
