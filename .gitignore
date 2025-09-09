@@ -39,3 +39,4 @@ doc/tags
 # Development
 .stylua.toml
 .luacheckrc
+AGENTS.md
