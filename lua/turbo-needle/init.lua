@@ -36,10 +36,6 @@ end
 
 -- Completion function: extract context and request completion
 function M.complete()
-	if not M.config.completions.enabled then
-		return
-	end
-
 	local context = require("turbo-needle.context")
 	if not context.is_filetype_supported() then
 		return
