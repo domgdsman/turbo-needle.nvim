@@ -3,20 +3,21 @@ local utils = require("turbo-needle.utils")
 
 local M = {}
 
--- Buffer-local state
-local function get_buf_state()
-	local bufnr = vim.api.nvim_get_current_buf()
-	if not M._buf_states then
-		M._buf_states = {}
+	-- Buffer-local state
+	local function get_buf_state()
+		local bufnr = vim.api.nvim_get_current_buf()
+		if not M._buf_states then
+			M._buf_states = {}
+		end
+		if not M._buf_states[bufnr] then
+			M._buf_states[bufnr] = {
+				debounce_timer = nil,
+				current_extmark = nil,
+				active_request = nil, -- Track active API request
+			}
+		end
+		return M._buf_states[bufnr]
 	end
-	if not M._buf_states[bufnr] then
-		M._buf_states[bufnr] = {
-			debounce_timer = nil,
-			current_extmark = nil,
-		}
-	end
-	return M._buf_states[bufnr]
-end
 
 -- Private config storage
 local _config = config.defaults
@@ -72,20 +73,31 @@ function M.setup_completion_trigger()
 			state.debounce_timer = nil
 		end
 
+		-- Cancel any active API request
+		if state.active_request then
+			state.active_request = nil -- Mark as cancelled
+		end
+
 		-- Start new timer
 		state.debounce_timer = vim.defer_fn(function()
-			M.complete()
-			state.debounce_timer = nil
+			-- Check if timer was cancelled before execution
+			if state.debounce_timer then
+				M.complete()
+				state.debounce_timer = nil
+			end
 		end, debounce_delay)
 	end
 
-	-- Clear timer and ghost text on buffer leave
+	-- Clear timer, cancel requests, and ghost text on buffer leave
 	vim.api.nvim_create_autocmd("BufLeave", {
 		callback = function()
 			local state = get_buf_state()
 			if state.debounce_timer then
 				state.debounce_timer:stop()
 				state.debounce_timer = nil
+			end
+			if state.active_request then
+				state.active_request = nil -- Cancel active request
 			end
 			M.clear_ghost_text()
 		end,
@@ -106,8 +118,21 @@ function M.complete()
 
 	local ctx = context.get_current_context()
 	local api = require("turbo-needle.api")
+	local state = get_buf_state()
+
+	-- Create a request ID to track this request
+	local request_id = {}
+	state.active_request = request_id
 
 	api.get_completion({ prefix = ctx.prefix, suffix = ctx.suffix }, function(err, result)
+		-- Check if this request was cancelled
+		if state.active_request ~= request_id then
+			return -- Request was cancelled, ignore result
+		end
+
+		-- Clear the active request
+		state.active_request = nil
+
 		if err then
 			utils.notify("Completion error: " .. err, vim.log.levels.ERROR)
 			return
@@ -137,7 +162,10 @@ end
 function M.clear_ghost_text()
 	local state = get_buf_state()
 	if state.current_extmark then
-		vim.api.nvim_buf_del_extmark(0, state.current_extmark.ns_id, state.current_extmark.id)
+		local success = pcall(vim.api.nvim_buf_del_extmark, 0, state.current_extmark.ns_id, state.current_extmark.id)
+		if not success then
+			utils.notify("Failed to clear ghost text extmark", vim.log.levels.WARN)
+		end
 		state.current_extmark = nil
 	end
 end
@@ -146,16 +174,49 @@ end
 function M.set_ghost_text(text)
 	local state = get_buf_state()
 	M.clear_ghost_text()
-	if text and text ~= "" then
-		local ns_id = vim.api.nvim_create_namespace("turbo-needle-ghost")
-		local cursor = vim.api.nvim_win_get_cursor(0)
-		local row, col = cursor[1] - 1, cursor[2] -- 0-based
-		local extmark_id = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-			virt_text = { { text, "Comment" } },
-			virt_text_pos = "inline",
-		})
-		state.current_extmark = { ns_id = ns_id, id = extmark_id }
+
+	-- Validate input
+	if not text or text == "" or type(text) ~= "string" then
+		return
 	end
+
+	-- Validate cursor position
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	if not cursor or #cursor < 2 then
+		return
+	end
+
+	local row, col = cursor[1] - 1, cursor[2] -- Convert to 0-based
+
+	-- Validate buffer and position
+	local bufnr = vim.api.nvim_get_current_buf()
+	local line_count = vim.api.nvim_buf_line_count(bufnr)
+	if row < 0 or row >= line_count then
+		return
+	end
+
+	local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+	if not line or col > #line then
+		return
+	end
+
+	-- Create namespace and set extmark
+	local ns_success, ns_id = pcall(vim.api.nvim_create_namespace, "turbo-needle-ghost")
+	if not ns_success then
+		utils.notify("Failed to create namespace for ghost text", vim.log.levels.ERROR)
+		return
+	end
+
+	local extmark_success, extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
+		virt_text = { { text, "Comment" } },
+		virt_text_pos = "inline",
+	})
+	if not extmark_success then
+		utils.notify("Failed to set ghost text extmark", vim.log.levels.ERROR)
+		return
+	end
+
+	state.current_extmark = { ns_id = ns_id, id = extmark_id }
 end
 
 -- Accept completion: insert ghost text if present, else return tab
@@ -163,13 +224,13 @@ function M.accept_completion()
 	local state = get_buf_state()
 	if state.current_extmark then
 		-- Get the virt_text from extmark
-		local extmark = vim.api.nvim_buf_get_extmark_by_id(
+		local extmark_success, extmark = pcall(vim.api.nvim_buf_get_extmark_by_id,
 			0,
 			state.current_extmark.ns_id,
 			state.current_extmark.id,
 			{ details = true }
 		)
-		if extmark and extmark[3] and extmark[3].virt_text then
+		if extmark_success and extmark and extmark[3] and extmark[3].virt_text then
 			local text = extmark[3].virt_text[1][1]
 			-- Validate text before insertion
 			if not text or text == "" or type(text) ~= "string" then
@@ -178,7 +239,11 @@ function M.accept_completion()
 				return "\t" -- Fall back to inserting tab
 			end
 			-- Insert text at cursor
-			vim.api.nvim_put({ text }, "c", false, true)
+			local put_success, err = pcall(vim.api.nvim_put, { text }, "c", false, true)
+			if not put_success then
+				utils.notify("Failed to insert completion text: " .. err, vim.log.levels.ERROR)
+				return "\t" -- Fall back to inserting tab
+			end
 			M.clear_ghost_text()
 			return "" -- Don't insert tab
 		end
