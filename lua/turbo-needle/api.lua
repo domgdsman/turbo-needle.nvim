@@ -37,7 +37,7 @@ local function build_fim_prompt(code_opts)
 	return string.format("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>", prefix, suffix)
 end
 
--- Default curl args builder for OpenAI-compatible API
+-- Default curl args builder for llama.cpp completion API
 function M.build_curl_args(provider_opts, code_opts)
 	local headers = {
 		["Content-Type"] = "application/json",
@@ -61,32 +61,14 @@ function M.build_curl_args(provider_opts, code_opts)
 	end
 
 	local body = {
-		model = provider_opts.model,
-		messages = {
-			{
-				role = "system",
-				content = [[You are an expert AI coding assistant specialized in generating precise code completions.
-Focus on filling in the code between <|fim_prefix|> and <|fim_suffix|> with the most appropriate continuation.
-Output only the completed code without additional text, explanations, or wrappers.]],
-			},
-			{
-				role = "user",
-				content = build_fim_prompt(code_opts),
-			},
-		},
+		prompt = build_fim_prompt(code_opts),
+		n_predict = provider_opts.max_tokens or 128,
+		temperature = provider_opts.temperature or 0.1,
+		stop = { "<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>" },
 	}
 
-	-- Conditionally add optional fields
-	if provider_opts.max_tokens ~= nil then
-		body.max_tokens = provider_opts.max_tokens
-	end
-
-	if provider_opts.temperature ~= nil then
-		body.temperature = provider_opts.temperature
-	end
-
 	return {
-		url = provider_opts.base_url .. "/v1/chat/completions",
+		url = provider_opts.base_url .. "/completion",
 		headers = headers,
 		body = body,
 		timeout = provider_opts.timeout,
@@ -173,9 +155,22 @@ end
 -- Parse API response to extract completion text
 function M.parse_response(result)
 	local completion_text = ""
-	if result and result.choices and result.choices[1] and result.choices[1].message then
+	if result and result.content then
+		-- llama.cpp completion response format
+		completion_text = result.content
+	elseif result and result.choices and result.choices[1] and result.choices[1].message then
+		-- OpenAI chat completion response format (fallback)
 		completion_text = result.choices[1].message.content or ""
 	end
+
+	-- Handle escape sequences in the completion text
+	if completion_text and completion_text ~= "" then
+		completion_text = completion_text:gsub("\\n", "\n")
+		completion_text = completion_text:gsub("\\t", "\t")
+		completion_text = completion_text:gsub("\\\"", "\"")
+		completion_text = completion_text:gsub("\\\\", "\\")
+	end
+
 	return completion_text
 end
 

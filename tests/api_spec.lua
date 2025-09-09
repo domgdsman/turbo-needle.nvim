@@ -18,17 +18,13 @@ describe("turbo-needle.api", function()
 
 			local result = api.build_curl_args(provider_opts, code_opts)
 
-			assert.are.equal("http://localhost:8000/v1/chat/completions", result.url)
+			assert.are.equal("http://localhost:8000/completion", result.url)
 			assert.is_nil(result.headers["Authorization"]) -- No API key set
 			assert.are.equal("application/json", result.headers["Content-Type"])
-			assert.are.equal("test-model", result.body.model)
-			assert.is_table(result.body.messages)
-			assert.are.equal(2, #result.body.messages)
-			assert.are.equal("system", result.body.messages[1].role)
-			assert.are.equal("user", result.body.messages[2].role)
-			assert.is_not_nil(string.find(result.body.messages[2].content, "<|fim_prefix|>"))
-			assert.is_nil(result.body.max_tokens) -- Not included when nil
-			assert.is_nil(result.body.temperature) -- Not included when nil
+			assert.is_not_nil(string.find(result.body.prompt, "<|fim_prefix|>"))
+			assert.are.equal(128, result.body.n_predict) -- Default value
+			assert.are.equal(0.1, result.body.temperature) -- Default value
+			assert.is_table(result.body.stop)
 			assert.are.equal(5000, result.timeout)
 		end)
 
@@ -56,8 +52,8 @@ describe("turbo-needle.api", function()
 			local result = api.build_curl_args(provider_opts, code_opts)
 
 			assert.are.equal("Bearer env-key", result.headers["Authorization"])
-			assert.are.equal("http://localhost:8000/v1/chat/completions", result.url)
-			assert.is_table(result.body.messages)
+			assert.are.equal("http://localhost:8000/completion", result.url)
+			assert.is_not_nil(result.body.prompt)
 
 			-- Restore original getenv
 			os.getenv = original_getenv
@@ -79,10 +75,10 @@ describe("turbo-needle.api", function()
 
 			local result = api.build_curl_args(provider_opts, code_opts)
 
-			assert.are.equal(150, result.body.max_tokens)
+			assert.are.equal(150, result.body.n_predict)
 			assert.are.equal(0.8, result.body.temperature)
-			assert.are.equal("http://localhost:8000/v1/chat/completions", result.url)
-			assert.is_table(result.body.messages)
+			assert.are.equal("http://localhost:8000/completion", result.url)
+			assert.is_not_nil(result.body.prompt)
 		end)
 	end)
 
