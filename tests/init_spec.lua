@@ -102,11 +102,12 @@ describe("turbo-needle", function()
 			end
 
 			local utils = require("turbo-needle.utils")
-			local original_error = utils.error
-			local error_called = false
-			utils.error = function(msg)
-				error_called = true
+			local original_notify = utils.notify
+			local notify_called = false
+			utils.notify = function(msg, level)
+				notify_called = true
 				assert.is_not_nil(string.find(msg, "API error"))
+				assert.are.equal(level, vim.log.levels.ERROR)
 			end
 
 			turbo_needle.complete()
@@ -114,9 +115,9 @@ describe("turbo-needle", function()
 			context.is_filetype_supported = original_is_supported
 			context.get_current_context = original_get_context
 			api.get_completion = original_get_completion
-			utils.error = original_error
+			utils.notify = original_notify
 
-			assert.is_true(error_called)
+			assert.is_true(notify_called)
 		end)
 	end)
 
