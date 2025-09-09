@@ -1,14 +1,46 @@
 local M = {}
 
+-- Context cache to avoid re-extraction for same cursor position
+local context_cache = {
+	bufnr = nil,
+	cursor_row = nil,
+	cursor_col = nil,
+	context = nil,
+	timestamp = 0,
+}
+
+-- Maximum context size limits
+local MAX_PREFIX_LINES = 50
+local MAX_SUFFIX_LINES = 50
+local MAX_LINE_LENGTH = 200
+local CACHE_TTL_MS = 100 -- Cache validity time
+
 -- Extract code context around cursor for FIM completion
 function M.extract_context(bufnr, cursor_row, cursor_col)
+	-- Check cache first
+	local current_time = vim.loop.now()
+	if context_cache.bufnr == bufnr and
+	   context_cache.cursor_row == cursor_row and
+	   context_cache.cursor_col == cursor_col and
+	   (current_time - context_cache.timestamp) < CACHE_TTL_MS then
+		return context_cache.context
+	end
+
 	-- Get all lines in the buffer
 	local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local total_lines = #all_lines
 
 	-- Validate cursor position
 	if cursor_row < 0 or cursor_row > total_lines - 1 then
-		return { prefix = "", suffix = "" }
+		local empty_context = { prefix = "", suffix = "" }
+		context_cache = {
+			bufnr = bufnr,
+			cursor_row = cursor_row,
+			cursor_col = cursor_col,
+			context = empty_context,
+			timestamp = current_time,
+		}
+		return empty_context
 	end
 
 	-- Convert cursor position to 1-based for string operations
@@ -16,10 +48,15 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 	local cursor_line_1based = cursor_row + 1
 	local cursor_col_1based = cursor_col + 1
 
-	-- Extract prefix: all content before cursor
+	-- Extract prefix: all content before cursor (with size limits)
 	local prefix_lines = {}
-	for i = 1, cursor_line_1based - 1 do
-		table.insert(prefix_lines, all_lines[i])
+	local prefix_start = math.max(1, cursor_line_1based - MAX_PREFIX_LINES)
+	for i = prefix_start, cursor_line_1based - 1 do
+		local line = all_lines[i]
+		if line and #line > MAX_LINE_LENGTH then
+			line = line:sub(1, MAX_LINE_LENGTH) .. "..."
+		end
+		table.insert(prefix_lines, line)
 	end
 
 	local prefix = table.concat(prefix_lines, "\n")
@@ -56,9 +93,14 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 		end
 	end
 
-	-- Add remaining lines after current line
-	for i = cursor_line_1based + 1, total_lines do
-		table.insert(suffix_lines, all_lines[i])
+	-- Add remaining lines after current line (with size limits)
+	local suffix_end = math.min(total_lines, cursor_line_1based + MAX_SUFFIX_LINES)
+	for i = cursor_line_1based + 1, suffix_end do
+		local line = all_lines[i]
+		if line and #line > MAX_LINE_LENGTH then
+			line = line:sub(1, MAX_LINE_LENGTH) .. "..."
+		end
+		table.insert(suffix_lines, line)
 	end
 
 	-- If no suffix part but there are remaining lines, add empty string to start with \n
@@ -66,10 +108,21 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 		table.insert(suffix_lines, 1, "")
 	end
 
-	return {
+	local result = {
 		prefix = prefix,
 		suffix = table.concat(suffix_lines, "\n"),
 	}
+
+	-- Update cache
+	context_cache = {
+		bufnr = bufnr,
+		cursor_row = cursor_row,
+		cursor_col = cursor_col,
+		context = result,
+		timestamp = current_time,
+	}
+
+	return result
 end
 
 -- Get current cursor position and extract context
