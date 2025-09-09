@@ -103,6 +103,23 @@ function M.setup_completion_trigger()
 		end,
 	})
 
+	-- Clean up buffer state when buffer is deleted
+	vim.api.nvim_create_autocmd("BufDelete", {
+		callback = function(args)
+			local bufnr = args.buf
+			if M._buf_states and M._buf_states[bufnr] then
+				local state = M._buf_states[bufnr]
+				if state.debounce_timer then
+					state.debounce_timer:stop()
+				end
+				if state.active_request then
+					state.active_request = nil
+				end
+				M._buf_states[bufnr] = nil
+			end
+		end,
+	})
+
 	-- Trigger on insert leave and cursor moved in insert
 	vim.api.nvim_create_autocmd({ "InsertLeave", "CursorMovedI" }, {
 		callback = trigger_completion,
@@ -180,7 +197,7 @@ function M.set_ghost_text(text)
 		return
 	end
 
-	-- Validate cursor position
+	-- Get cursor position
 	local cursor = vim.api.nvim_win_get_cursor(0)
 	if not cursor or #cursor < 2 then
 		return
@@ -188,32 +205,43 @@ function M.set_ghost_text(text)
 
 	local row, col = cursor[1] - 1, cursor[2] -- Convert to 0-based
 
-	-- Validate buffer and position
-	local bufnr = vim.api.nvim_get_current_buf()
-	local line_count = vim.api.nvim_buf_line_count(bufnr)
-	if row < 0 or row >= line_count then
-		return
-	end
-
-	local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
-	if not line or col > #line then
-		return
-	end
-
 	-- Create namespace and set extmark
-	local ns_success, ns_id = pcall(vim.api.nvim_create_namespace, "turbo-needle-ghost")
-	if not ns_success then
-		utils.notify("Failed to create namespace for ghost text", vim.log.levels.ERROR)
-		return
-	end
-
-	local extmark_success, extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
+	local ns_id = vim.api.nvim_create_namespace("turbo-needle-ghost")
+	local extmark_id = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
 		virt_text = { { text, "Comment" } },
 		virt_text_pos = "inline",
 	})
-	if not extmark_success then
-		utils.notify("Failed to set ghost text extmark", vim.log.levels.ERROR)
-		return
+
+	-- Handle multi-line text
+	if text:find("\n") then
+		-- Multi-line completion: use virt_lines for better display
+		local lines = vim.split(text, "\n", { plain = true })
+		local virt_lines = {}
+
+		for _, line in ipairs(lines) do
+			table.insert(virt_lines, { { line, "Comment" } })
+		end
+
+		local success, multiline_extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
+			virt_lines = virt_lines,
+			virt_text_pos = "overlay",
+		})
+		if not success then
+			utils.notify("Failed to set multi-line ghost text extmark", vim.log.levels.ERROR)
+			return
+		end
+		state.current_extmark = { ns_id = ns_id, id = multiline_extmark_id }
+	else
+		-- Single line completion
+		local success, singleline_extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
+			virt_text = { { text, "Comment" } },
+			virt_text_pos = "inline",
+		})
+		if not success then
+			utils.notify("Failed to set ghost text extmark", vim.log.levels.ERROR)
+			return
+		end
+		state.current_extmark = { ns_id = ns_id, id = singleline_extmark_id }
 	end
 
 	state.current_extmark = { ns_id = ns_id, id = extmark_id }
@@ -224,28 +252,19 @@ function M.accept_completion()
 	local state = get_buf_state()
 	if state.current_extmark then
 		-- Get the virt_text from extmark
-		local extmark_success, extmark = pcall(vim.api.nvim_buf_get_extmark_by_id,
+		local extmark = vim.api.nvim_buf_get_extmark_by_id(
 			0,
 			state.current_extmark.ns_id,
 			state.current_extmark.id,
 			{ details = true }
 		)
-		if extmark_success and extmark and extmark[3] and extmark[3].virt_text then
+		if extmark and extmark[3] and extmark[3].virt_text then
 			local text = extmark[3].virt_text[1][1]
-			-- Validate text before insertion
-			if not text or text == "" or type(text) ~= "string" then
-				utils.notify("Invalid ghost text format", vim.log.levels.ERROR)
+			if text and text ~= "" then
+				vim.api.nvim_put({ text }, "c", false, true)
 				M.clear_ghost_text()
-				return "\t" -- Fall back to inserting tab
+				return "" -- Don't insert tab
 			end
-			-- Insert text at cursor
-			local put_success, err = pcall(vim.api.nvim_put, { text }, "c", false, true)
-			if not put_success then
-				utils.notify("Failed to insert completion text: " .. err, vim.log.levels.ERROR)
-				return "\t" -- Fall back to inserting tab
-			end
-			M.clear_ghost_text()
-			return "" -- Don't insert tab
 		end
 	end
 	-- No ghost text, insert tab
