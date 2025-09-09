@@ -12,7 +12,6 @@ M.defaults = {
 		parse_curl_args = nil, -- Optional custom curl args function
 	},
 	completions = {
-		enabled = true,
 		debounce_ms = 300,
 	},
 	keymaps = {
@@ -37,6 +36,7 @@ function M.validate(config)
 		["api.model"] = { config.api.model, "string" },
 		["api.timeout"] = { config.api.timeout, "number" },
 		["api.max_retries"] = { config.api.max_retries, "number" },
+		["completions.debounce_ms"] = { config.completions.debounce_ms, "number" },
 	})
 
 	-- Validate api_key_name is string when set
