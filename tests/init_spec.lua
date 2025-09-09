@@ -50,7 +50,7 @@ describe("turbo-needle", function()
 				assert.are.equal("test prefix", data.prefix)
 				assert.are.equal("test suffix", data.suffix)
 				-- Simulate success
-				callback(nil, { choices = { { message = { content = "completed code" } } } })
+				callback(nil, { content = "completed code" })
 			end
 
 			-- Mock set_ghost_text
@@ -130,6 +130,56 @@ describe("turbo-needle", function()
 			utils.notify = original_notify
 
 			assert.is_true(notify_called)
+		end)
+
+		it("should use custom parse_response when provided", function()
+			-- Setup turbo-needle with custom parse_response
+			turbo_needle.setup({
+				api = {
+					parse_response = function(result)
+						return result.custom_field or ""
+					end
+				}
+			})
+
+			local context = require("turbo-needle.context")
+			local original_is_supported = context.is_filetype_supported
+			local original_get_context = context.get_current_context
+			context.is_filetype_supported = function()
+				return true
+			end
+			context.get_current_context = function()
+				return { prefix = "", suffix = "" }
+			end
+
+			local api = require("turbo-needle.api")
+			local original_get_completion = api.get_completion
+			local get_completion_called = false
+			api.get_completion = function(data, callback)
+				get_completion_called = true
+				-- Simulate success with custom format
+				callback(nil, { custom_field = "custom parsed completion" })
+			end
+
+			-- Mock set_ghost_text
+			local original_set_ghost = turbo_needle.set_ghost_text
+			local set_ghost_called = false
+			turbo_needle.set_ghost_text = function(text)
+				set_ghost_called = true
+				assert.are.equal("custom parsed completion", text)
+			end
+
+			-- Call complete
+			turbo_needle.complete()
+
+			-- Restore mocks
+			context.is_filetype_supported = original_is_supported
+			context.get_current_context = original_get_context
+			api.get_completion = original_get_completion
+			turbo_needle.set_ghost_text = original_set_ghost
+
+			assert.is_true(get_completion_called)
+			assert.is_true(set_ghost_called)
 		end)
 	end)
 

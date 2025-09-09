@@ -134,5 +134,39 @@ describe("turbo-needle.config", function()
 				})
 			end)
 		end)
+
+		it("should validate parse_response is function when set", function()
+			assert.has_no.errors(function()
+				config.validate({
+					api = {
+						base_url = "http://localhost:8000",
+						model = "test",
+						timeout = 5000,
+						max_retries = 2,
+						parse_response = function(result) return result.content or "" end, -- Valid function
+					},
+					completions = { debounce_ms = 300 },
+					keymaps = { accept = "<Tab>" },
+					filetypes = { enabled = {}, disabled = {} },
+				})
+			end)
+		end)
+
+		it("should reject non-function parse_response", function()
+			assert.has_error(function()
+				config.validate({
+					api = {
+						base_url = "http://localhost:8000",
+						model = "test",
+						timeout = 5000,
+						max_retries = 2,
+						parse_response = "invalid", -- Invalid: string instead of function
+					},
+					completions = { debounce_ms = 300 },
+					keymaps = { accept = "<Tab>" },
+					filetypes = { enabled = {}, disabled = {} },
+				})
+			end)
+		end)
 	end)
 end)
