@@ -20,7 +20,8 @@ local function get_buf_state()
 		M._buf_states[bufnr] = {
 			debounce_timer = nil,
 			current_extmark = nil,
-			active_request = nil, -- Track active API request
+			active_request_id = nil, -- Track active API request ID
+			request_counter = 0, -- Counter for generating unique request IDs
 		}
 	end
 	return M._buf_states[bufnr]
@@ -42,6 +43,8 @@ local function get_cached_completion(ctx)
 	if entry then
 		local current_time = vim.loop.now()
 		if (current_time - entry.timestamp) < completion_cache.ttl_ms then
+			-- Update access time for LRU
+			entry.last_access = current_time
 			return entry.completion
 		else
 			-- Remove expired entry
@@ -54,21 +57,32 @@ end
 
 local function cache_completion(ctx, completion)
 	local key = get_cache_key(ctx)
+	local current_time = vim.loop.now()
 
-	-- Simple cache size management
+	-- LRU cache management
 	local cache_size = 0
-	for _ in pairs(completion_cache.entries) do
+	local oldest_key = nil
+	local oldest_time = current_time
+
+	for k, v in pairs(completion_cache.entries) do
 		cache_size = cache_size + 1
+		-- Find oldest accessed entry
+		local access_time = v.last_access or v.timestamp
+		if access_time < oldest_time then
+			oldest_time = access_time
+			oldest_key = k
+		end
 	end
 
-	if cache_size >= completion_cache.max_size then
-		-- Clear oldest entries (simple approach - clear all)
-		completion_cache.entries = {}
+	-- Remove oldest entry if cache is full
+	if cache_size >= completion_cache.max_size and oldest_key then
+		completion_cache.entries[oldest_key] = nil
 	end
 
 	completion_cache.entries[key] = {
 		completion = completion,
-		timestamp = vim.loop.now(),
+		timestamp = current_time,
+		last_access = current_time,
 	}
 end
 
@@ -122,23 +136,42 @@ function M.setup_completion_trigger()
 
 		-- Cancel existing timer
 		if state.debounce_timer then
-			state.debounce_timer:stop()
+			if type(state.debounce_timer) == "userdata" then
+				-- It's a uv timer, stop it properly
+				state.debounce_timer:stop()
+				state.debounce_timer:close()
+			else
+				-- Legacy: it might be a vim.defer_fn handle (number)
+				pcall(function()
+					vim.fn.timer_stop(state.debounce_timer)
+				end)
+			end
 			state.debounce_timer = nil
 		end
 
-		-- Cancel any active API request
-		if state.active_request then
-			state.active_request = nil -- Mark as cancelled
-		end
+		-- Cancel any active API request by incrementing the request counter
+		state.request_counter = state.request_counter + 1
+		state.active_request_id = nil
 
-		-- Start new timer
-		state.debounce_timer = vim.defer_fn(function()
-			-- Check if timer was cancelled before execution
-			if state.debounce_timer then
-				M.complete()
-				state.debounce_timer = nil
-			end
-		end, debounce_delay)
+		-- Create new timer using vim.loop
+		local timer = vim.loop.new_timer()
+		state.debounce_timer = timer
+
+		timer:start(
+			debounce_delay,
+			0,
+			vim.schedule_wrap(function()
+				-- Check if this timer is still valid
+				if state.debounce_timer == timer then
+					M.complete()
+					state.debounce_timer = nil
+					if timer then
+						timer:stop()
+						timer:close()
+					end
+				end
+			end)
+		)
 	end
 
 	-- Clear timer, cancel requests, and ghost text on buffer leave
@@ -146,12 +179,20 @@ function M.setup_completion_trigger()
 		callback = function()
 			local state = get_buf_state()
 			if state.debounce_timer then
-				state.debounce_timer:stop()
+				if type(state.debounce_timer) == "userdata" then
+					state.debounce_timer:stop()
+					state.debounce_timer:close()
+				else
+					-- Legacy cleanup
+					pcall(function()
+						vim.fn.timer_stop(state.debounce_timer)
+					end)
+				end
 				state.debounce_timer = nil
 			end
-			if state.active_request then
-				state.active_request = nil -- Cancel active request
-			end
+			-- Cancel active request by incrementing counter
+			state.request_counter = state.request_counter + 1
+			state.active_request_id = nil
 			M.clear_ghost_text()
 		end,
 	})
@@ -163,14 +204,47 @@ function M.setup_completion_trigger()
 			if M._buf_states and M._buf_states[bufnr] then
 				local state = M._buf_states[bufnr]
 				if state.debounce_timer then
-					state.debounce_timer:stop()
-				end
-				if state.active_request then
-					state.active_request = nil
+					if type(state.debounce_timer) == "userdata" then
+						state.debounce_timer:stop()
+						state.debounce_timer:close()
+					else
+						pcall(function()
+							vim.fn.timer_stop(state.debounce_timer)
+						end)
+					end
 				end
 				M._buf_states[bufnr] = nil
 			end
 		end,
+	})
+
+	-- Clean up old buffer states periodically to prevent memory leak
+	vim.api.nvim_create_autocmd("BufEnter", {
+		callback = vim.schedule_wrap(function()
+			if M._buf_states then
+				-- Get list of valid buffers
+				local valid_bufs = {}
+				for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+					if vim.api.nvim_buf_is_valid(buf) then
+						valid_bufs[buf] = true
+					end
+				end
+
+				-- Clean up states for invalid buffers
+				for bufnr, _ in pairs(M._buf_states) do
+					if not valid_bufs[bufnr] then
+						local state = M._buf_states[bufnr]
+						if state and state.debounce_timer then
+							if type(state.debounce_timer) == "userdata" then
+								state.debounce_timer:stop()
+								state.debounce_timer:close()
+							end
+						end
+						M._buf_states[bufnr] = nil
+					end
+				end
+			end
+		end),
 	})
 
 	-- Trigger on insert leave and cursor moved in insert
@@ -197,18 +271,19 @@ function M.complete()
 		return
 	end
 
-	-- Create a request ID to track this request
-	local request_id = {}
-	state.active_request = request_id
+	-- Create a unique request ID to track this request
+	state.request_counter = state.request_counter + 1
+	local request_id = state.request_counter
+	state.active_request_id = request_id
 
 	api.get_completion({ prefix = ctx.prefix, suffix = ctx.suffix }, function(err, result)
-		-- Check if this request was cancelled
-		if state.active_request ~= request_id then
+		-- Check if this request was cancelled (newer request started)
+		if state.active_request_id ~= request_id then
 			return -- Request was cancelled, ignore result
 		end
 
 		-- Clear the active request
-		state.active_request = nil
+		state.active_request_id = nil
 
 		if err then
 			utils.notify("Completion error: " .. err, vim.log.levels.ERROR)
@@ -311,35 +386,48 @@ end
 function M.accept_completion()
 	local state = get_buf_state()
 	if state.current_extmark then
-		-- Get the extmark details
-		local extmark = vim.api.nvim_buf_get_extmark_by_id(
+		-- Safely get the extmark details
+		local success, extmark = pcall(
+			vim.api.nvim_buf_get_extmark_by_id,
 			0,
 			state.current_extmark.ns_id,
 			state.current_extmark.id,
 			{ details = true }
 		)
 
-		if extmark and extmark[3] then
+		if success and extmark and #extmark >= 3 and extmark[3] then
 			local details = extmark[3]
 			local text_to_insert = nil
 
 			-- Handle multi-line completion (virt_lines)
-			if details.virt_lines then
+			if details.virt_lines and type(details.virt_lines) == "table" then
 				local lines = {}
 				for _, line_parts in ipairs(details.virt_lines) do
-					if line_parts[1] then
-						table.insert(lines, line_parts[1][1] or "")
+					if type(line_parts) == "table" and line_parts[1] then
+						if type(line_parts[1]) == "table" and line_parts[1][1] then
+							table.insert(lines, line_parts[1][1])
+						elseif type(line_parts[1]) == "string" then
+							table.insert(lines, line_parts[1])
+						else
+							table.insert(lines, "")
+						end
 					else
 						table.insert(lines, "")
 					end
 				end
-				text_to_insert = table.concat(lines, "\n")
+				if #lines > 0 then
+					text_to_insert = table.concat(lines, "\n")
+				end
 			-- Handle single-line completion (virt_text)
-			elseif details.virt_text and details.virt_text[1] then
-				text_to_insert = details.virt_text[1][1]
+			elseif details.virt_text and type(details.virt_text) == "table" and details.virt_text[1] then
+				if type(details.virt_text[1]) == "table" and details.virt_text[1][1] then
+					text_to_insert = details.virt_text[1][1]
+				elseif type(details.virt_text[1]) == "string" then
+					text_to_insert = details.virt_text[1]
+				end
 			end
 
-			if text_to_insert and text_to_insert ~= "" then
+			if text_to_insert and type(text_to_insert) == "string" and text_to_insert ~= "" then
 				-- Split into lines for proper insertion
 				local lines = vim.split(text_to_insert, "\n", { plain = true })
 				vim.api.nvim_put(lines, "c", false, true)

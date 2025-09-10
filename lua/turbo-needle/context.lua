@@ -13,7 +13,7 @@ local context_cache = {
 local MAX_PREFIX_LINES = 50
 local MAX_SUFFIX_LINES = 50
 local MAX_LINE_LENGTH = 200
-local CACHE_TTL_MS = 100 -- Cache validity time
+local CACHE_TTL_MS = 500 -- Cache validity time (increased from 100ms to 500ms)
 
 -- Extract code context around cursor for FIM completion
 function M.extract_context(bufnr, cursor_row, cursor_col)
@@ -45,10 +45,9 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 		return empty_context
 	end
 
-	-- Convert cursor position to 1-based for string operations
-	-- cursor_row is 0-based, cursor_col is 0-based
+	-- cursor_row is 0-based, cursor_col is 0-based byte index
+	-- Convert to 1-based for Lua string operations and array indexing
 	local cursor_line_1based = cursor_row + 1
-	local cursor_col_1based = cursor_col + 1
 
 	-- Extract prefix: all content before cursor (with size limits)
 	local prefix_lines = {}
@@ -68,31 +67,34 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 
 	-- Add the current line up to cursor position
 	if cursor_line_1based <= total_lines then
-		local current_line = all_lines[cursor_line_1based]
-		if cursor_col_1based > 1 then
-			-- Extract substring up to cursor column (cursor in middle of line)
-			local prefix_part = string.sub(current_line, 1, cursor_col_1based - 1)
+		local current_line = all_lines[cursor_line_1based] or ""
+		if cursor_col > 0 then
+			-- Extract substring up to cursor column
+			-- cursor_col is 0-based byte index, string.sub expects 1-based
+			local prefix_part = string.sub(current_line, 1, cursor_col)
 			prefix = prefix .. prefix_part
 		end
-		-- Note: When cursor is at column 0, don't add current line to prefix
-		-- The current line will be handled in the suffix extraction
+		-- When cursor_col is 0, we're at the beginning of the line, no prefix from current line
 	end
 
 	-- Extract suffix: all content after cursor
 	local suffix_lines = {}
 	local has_suffix_part = false
 	if cursor_line_1based <= total_lines then
-		local current_line = all_lines[cursor_line_1based]
-		if cursor_col_1based <= #current_line then
-			-- Extract substring from cursor column to end of line
-			local suffix_part = string.sub(current_line, cursor_col_1based)
+		local current_line = all_lines[cursor_line_1based] or ""
+		-- cursor_col is 0-based byte position where cursor is
+		-- We want everything from cursor_col+1 onwards (1-based for string.sub)
+		if cursor_col < #current_line then
+			-- Extract substring from cursor position to end of line
+			local suffix_part = string.sub(current_line, cursor_col + 1)
 			table.insert(suffix_lines, suffix_part)
 			has_suffix_part = true
-		else
-			-- Cursor beyond line length, add empty string to maintain line structure
+		elseif cursor_col == #current_line then
+			-- Cursor at end of line, no suffix from current line but may have following lines
 			table.insert(suffix_lines, "")
 			has_suffix_part = true
 		end
+		-- If cursor_col > #current_line (shouldn't happen normally), treat as end of line
 	end
 
 	-- Add remaining lines after current line (with size limits)
@@ -130,7 +132,7 @@ end
 -- Get current cursor position and extract context
 function M.get_current_context()
 	local bufnr = vim.api.nvim_get_current_buf()
-	local cursor = vim.api.nvim_win_get_cursor(0) -- Returns {row, col} 0-based
+	local cursor = vim.api.nvim_win_get_cursor(0) -- Returns {row (1-based), col (0-based byte index)}
 
 	if not cursor or #cursor < 2 then
 		return { prefix = "", suffix = "" }
@@ -148,20 +150,26 @@ function M.is_filetype_supported()
 	local filetype = vim.bo.filetype
 
 	-- Check if filetype is in disabled list first (disabled takes precedence)
-	for _, disabled_type in ipairs(config.filetypes.disabled) do
-		if filetype == disabled_type then
-			return false
+	if config.filetypes.disabled then
+		for _, disabled_type in ipairs(config.filetypes.disabled) do
+			if filetype == disabled_type then
+				return false
+			end
 		end
 	end
 
 	-- Check if filetype is in enabled list
-	for _, enabled_type in ipairs(config.filetypes.enabled) do
-		if filetype == enabled_type then
-			return true
+	if config.filetypes.enabled then
+		for _, enabled_type in ipairs(config.filetypes.enabled) do
+			if filetype == enabled_type then
+				return true
+			end
 		end
 	end
 
 	-- Default: allow if not explicitly disabled
+	-- Note: This means the enabled list acts as a preference/priority list,
+	-- not as an exclusive allowlist. All non-disabled types are allowed.
 	return true
 end
 
