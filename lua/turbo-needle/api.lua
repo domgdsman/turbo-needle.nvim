@@ -100,17 +100,35 @@ function M.request_completion(curl_args, callback)
 		text = true,
 		timeout = curl_args.timeout,
 	}, function(obj)
+		if not obj then
+			callback("System call failed: no response object", nil)
+			return
+		end
+
 		if obj.code == 0 then
+			-- Check if stdout exists and is not empty
+			if not obj.stdout or obj.stdout == "" then
+				callback("Empty response from server", nil)
+				return
+			end
+
 			local success, result = pcall(vim.json.decode, obj.stdout)
-			if success then
+			if success and result then
 				callback(nil, result)
 			else
-				callback("Invalid JSON response", nil)
+				-- Try to provide more context about the JSON error
+				local error_detail = "Invalid JSON response"
+				if not success and result then
+					error_detail = error_detail .. ": " .. tostring(result)
+				end
+				callback(error_detail, nil)
 			end
 		else
-			local error_msg = "HTTP error: " .. obj.code
+			local error_msg = "HTTP error: " .. tostring(obj.code or "unknown")
 			if obj.stderr and obj.stderr ~= "" then
-				error_msg = error_msg .. " - " .. obj.stderr:match("^%s*(.-)%s*$")
+				-- Safely extract error message
+				local stderr_msg = obj.stderr:match("^%s*(.-)%s*$") or obj.stderr
+				error_msg = error_msg .. " - " .. stderr_msg
 			end
 			callback(error_msg, nil)
 		end
@@ -159,20 +177,34 @@ function M.parse_response(result)
 	end
 
 	-- Handle llama.cpp completion response format
-	local completion_text = ""
+	local completion_text = nil
 	if result.content then
 		completion_text = result.content
 	end
 
-	-- Handle escape sequences in the completion text
-	if completion_text and completion_text ~= "" then
-		completion_text = completion_text:gsub("\\n", "\n")
-		completion_text = completion_text:gsub("\\t", "\t")
-		completion_text = completion_text:gsub('\\"', '"')
-		completion_text = completion_text:gsub("\\\\", "\\")
+	-- Ensure completion_text is a string before processing
+	if not completion_text or type(completion_text) ~= "string" then
+		return ""
 	end
 
-	return completion_text or ""
+	-- Handle escape sequences in the completion text
+	if completion_text ~= "" then
+		-- Process escape sequences safely
+		local success, processed = pcall(function()
+			local text = completion_text
+			text = text:gsub("\\n", "\n")
+			text = text:gsub("\\t", "\t")
+			text = text:gsub('\\"', '"')
+			text = text:gsub("\\\\", "\\")
+			return text
+		end)
+
+		if success then
+			completion_text = processed
+		end
+	end
+
+	return completion_text
 end
 
 return M

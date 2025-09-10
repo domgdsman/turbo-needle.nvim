@@ -138,8 +138,8 @@ describe("turbo-needle", function()
 				api = {
 					parse_response = function(result)
 						return result.custom_field or ""
-					end
-				}
+					end,
+				},
 			})
 
 			local context = require("turbo-needle.context")

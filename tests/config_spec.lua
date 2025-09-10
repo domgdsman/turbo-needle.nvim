@@ -143,7 +143,9 @@ describe("turbo-needle.config", function()
 						model = "test",
 						timeout = 5000,
 						max_retries = 2,
-						parse_response = function(result) return result.content or "" end, -- Valid function
+						parse_response = function(result)
+							return result.content or ""
+						end, -- Valid function
 					},
 					completions = { debounce_ms = 300 },
 					keymaps = { accept = "<Tab>" },
