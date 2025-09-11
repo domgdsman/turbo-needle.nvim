@@ -113,7 +113,7 @@ function M.request_completion(curl_args, callback)
 	table.insert(args, curl_args.url)
 
 	-- Execute with plenary.job
-	Job:new({
+	local job = Job:new({
 		command = "curl",
 		args = args,
 		on_exit = function(job, return_val)
@@ -152,7 +152,10 @@ function M.request_completion(curl_args, callback)
 				callback(error_msg, nil)
 			end
 		end,
-	}):start()
+	})
+
+	job:start()
+	return job
 end
 
 -- Main completion request function
@@ -173,10 +176,11 @@ function M.get_completion(prompt_data, callback)
 	-- Make the request with retry logic
 	local attempt = 0
 	local max_retries = config.api.max_retries
+	local active_job = nil -- Track the current job for cancellation
 
 	local function attempt_request()
 		attempt = attempt + 1
-		M.request_completion(curl_args, function(err, result)
+		active_job = M.request_completion(curl_args, function(err, result)
 			if err and attempt <= max_retries then
 				-- Retry on error with exponential backoff
 				local delay = 1000 * (2 ^ (attempt - 1))
@@ -188,6 +192,7 @@ function M.get_completion(prompt_data, callback)
 	end
 
 	attempt_request()
+	return active_job
 end
 
 -- Parse API response to extract completion text (llama.cpp format only)
