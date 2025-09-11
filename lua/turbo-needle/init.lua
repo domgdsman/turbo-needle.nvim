@@ -134,7 +134,9 @@ function M.setup_completion_trigger()
 	local debounce_delay = _config.completions.debounce_ms
 
 	local function trigger_completion()
-		if not enabled then return end
+		if not enabled then
+			return
+		end
 
 		local state = get_buf_state()
 		-- Clear existing ghost text
@@ -316,45 +318,48 @@ function M.complete()
 	state.active_request_id = request_id
 
 	-- Start the new request and store the job for potential cancellation
-	state.active_job = api.get_completion({ prefix = ctx.prefix, suffix = ctx.suffix }, function(err, result)
-		-- Check if this request was cancelled (newer request started)
-		if state.active_request_id ~= request_id then
-			return -- Request was cancelled, ignore result
-		end
-
-		-- Clear the active request and job
-		state.active_request_id = nil
-		state.active_job = nil
-
-		if err then
-			utils.notify("Completion error: " .. err, vim.log.levels.ERROR)
-			return
-		end
-
-		-- Parse the completion text from API response
-		local completion_text
-		if _config.api.parse_response then
-			completion_text = _config.api.parse_response(result)
-		else
-			completion_text = api.parse_response(result)
-		end
-
-		-- Validate completion text quality
-		local is_valid, validation_error = utils.validate_completion(completion_text, ctx)
-		if not is_valid then
-			-- Don't show warnings for common cases like empty completions
-			if validation_error ~= "Empty completion" and validation_error ~= "Completion too short" then
-				utils.notify("Completion filtered: " .. validation_error, vim.log.levels.DEBUG)
+	state.active_job = api.get_completion(
+		{ prefix = ctx.prefix, suffix = ctx.suffix },
+		vim.schedule_wrap(function(err, result)
+			-- Check if this request was cancelled (newer request started)
+			if state.active_request_id ~= request_id then
+				return -- Request was cancelled, ignore result
 			end
-			return
-		end
 
-		-- Cache the valid completion
-		cache_completion(ctx, completion_text)
+			-- Clear the active request and job
+			state.active_request_id = nil
+			state.active_job = nil
 
-		-- Set ghost text for the completion
-		M.set_ghost_text(completion_text)
-	end)
+			if err then
+				utils.notify("Completion error: " .. err, vim.log.levels.ERROR)
+				return
+			end
+
+			-- Parse the completion text from API response
+			local completion_text
+			if _config.api.parse_response then
+				completion_text = _config.api.parse_response(result)
+			else
+				completion_text = api.parse_response(result)
+			end
+
+			-- Validate completion text quality
+			local is_valid, validation_error = utils.validate_completion(completion_text, ctx)
+			if not is_valid then
+				-- Don't show warnings for common cases like empty completions
+				if validation_error ~= "Empty completion" and validation_error ~= "Completion too short" then
+					utils.notify("Completion filtered: " .. validation_error, vim.log.levels.DEBUG)
+				end
+				return
+			end
+
+			-- Cache the valid completion
+			cache_completion(ctx, completion_text)
+
+			-- Set ghost text for the completion
+			M.set_ghost_text(completion_text)
+		end)
+	)
 end
 
 -- Clear ghost text
@@ -524,17 +529,17 @@ end
 -- Metatable for read-only 'enabled' property
 local mt = {
 	__index = function(t, k)
-		if k == 'enabled' then
-			return enabled  -- Return the private enabled value
+		if k == "enabled" then
+			return enabled -- Return the private enabled value
 		end
-		return rawget(t, k)  -- Normal table access for other keys
+		return rawget(t, k) -- Normal table access for other keys
 	end,
 	__newindex = function(t, k, v)
-		if k == 'enabled' then
+		if k == "enabled" then
 			error("Cannot set 'enabled' directly. Use enable() or disable() functions.", 2)
 		end
-		rawset(t, k, v)  -- Normal table assignment for other keys
-	end
+		rawset(t, k, v) -- Normal table assignment for other keys
+	end,
 }
 
 return setmetatable(M, mt)

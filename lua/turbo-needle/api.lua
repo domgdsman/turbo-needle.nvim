@@ -116,7 +116,7 @@ function M.request_completion(curl_args, callback)
 	local job = Job:new({
 		command = "curl",
 		args = args,
-		on_exit = function(job, return_val)
+		on_exit = vim.schedule_wrap(function(job, return_val)
 			if return_val == 0 then
 				-- Get stdout from the job
 				local stdout = job:result()
@@ -151,7 +151,7 @@ function M.request_completion(curl_args, callback)
 
 				callback(error_msg, nil)
 			end
-		end,
+		end),
 	})
 
 	job:start()

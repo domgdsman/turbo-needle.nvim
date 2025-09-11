@@ -64,6 +64,9 @@ describe("turbo-needle", function()
 			-- Call complete
 			turbo_needle.complete()
 
+			-- Wait for async callbacks to complete
+			vim.wait(100)
+
 			-- Restore mocks
 			context.is_filetype_supported = original_is_supported
 			context.get_current_context = original_get_context
@@ -124,6 +127,9 @@ describe("turbo-needle", function()
 
 			turbo_needle.complete()
 
+			-- Wait for async callbacks to complete
+			vim.wait(100)
+
 			context.is_filetype_supported = original_is_supported
 			context.get_current_context = original_get_context
 			api.get_completion = original_get_completion
@@ -171,6 +177,9 @@ describe("turbo-needle", function()
 
 			-- Call complete
 			turbo_needle.complete()
+
+			-- Wait for async callbacks to complete
+			vim.wait(100)
 
 			-- Restore mocks
 			context.is_filetype_supported = original_is_supported

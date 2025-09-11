@@ -191,8 +191,8 @@ describe("turbo-needle.api", function()
 				choices = {
 					{
 						text = "completed code",
-					}
-				}
+					},
+				},
 			}
 			local text = api.parse_response(result)
 			assert.are.equal("completed code", text)
