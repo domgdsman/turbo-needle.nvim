@@ -7,8 +7,8 @@ describe("turbo-needle.api", function()
 				base_url = "http://localhost:8000",
 				model = "test-model",
 				api_key_name = nil, -- nil, so no auth header
-				max_tokens = nil, -- nil, so not included
-				temperature = nil, -- nil, so not included
+				max_tokens = 256, -- Use default value
+				temperature = 0.1, -- Use default value
 				timeout = 5000,
 			}
 			local code_opts = {
@@ -18,13 +18,14 @@ describe("turbo-needle.api", function()
 
 			local result = api.build_curl_args(provider_opts, code_opts)
 
-			assert.are.equal("http://localhost:8000/completion", result.url)
+			assert.are.equal("http://localhost:8000/v1/completions", result.url)
 			assert.is_nil(result.headers["Authorization"]) -- No API key set
 			assert.are.equal("application/json", result.headers["Content-Type"])
 			assert.is_not_nil(string.find(result.body.prompt, "<|fim_prefix|>"))
-			assert.are.equal(128, result.body.n_predict) -- Default value
+			assert.are.equal("test-model", result.body.model)
+			assert.are.equal(256, result.body.max_tokens) -- Default value
 			assert.are.equal(0.1, result.body.temperature) -- Default value
-			assert.is_table(result.body.stop)
+			assert.are.equal(false, result.body.stream)
 			assert.are.equal(5000, result.timeout)
 		end)
 
@@ -52,7 +53,7 @@ describe("turbo-needle.api", function()
 			local result = api.build_curl_args(provider_opts, code_opts)
 
 			assert.are.equal("Bearer env-key", result.headers["Authorization"])
-			assert.are.equal("http://localhost:8000/completion", result.url)
+			assert.are.equal("http://localhost:8000/v1/completions", result.url)
 			assert.is_not_nil(result.body.prompt)
 
 			-- Restore original getenv
@@ -75,10 +76,35 @@ describe("turbo-needle.api", function()
 
 			local result = api.build_curl_args(provider_opts, code_opts)
 
-			assert.are.equal(150, result.body.n_predict)
+			assert.are.equal(150, result.body.max_tokens)
 			assert.are.equal(0.8, result.body.temperature)
-			assert.are.equal("http://localhost:8000/completion", result.url)
+			assert.are.equal("http://localhost:8000/v1/completions", result.url)
 			assert.is_not_nil(result.body.prompt)
+		end)
+
+		it("should include optional parameters when set", function()
+			local provider_opts = {
+				base_url = "http://localhost:8000",
+				model = "test-model",
+				api_key_name = nil,
+				max_tokens = 200,
+				temperature = 0.7,
+				top_p = 0.8,
+				top_k = 20,
+				repetition_penalty = 1.05,
+				timeout = 5000,
+			}
+			local code_opts = {
+				prefix = "function test() {",
+				suffix = "}",
+			}
+
+			local result = api.build_curl_args(provider_opts, code_opts)
+
+			assert.are.equal(0.8, result.body.top_p)
+			assert.are.equal(20, result.body.top_k)
+			assert.are.equal(1.05, result.body.repetition_penalty)
+			assert.are.equal("http://localhost:8000/v1/completions", result.url)
 		end)
 	end)
 
@@ -160,9 +186,13 @@ describe("turbo-needle.api", function()
 	end)
 
 	describe("parse_response", function()
-		it("should parse completion text from valid llama.cpp response", function()
+		it("should parse completion text from valid OpenAI response", function()
 			local result = {
-				content = "completed code",
+				choices = {
+					{
+						text = "completed code",
+					}
+				}
 			}
 			local text = api.parse_response(result)
 			assert.are.equal("completed code", text)

@@ -5,8 +5,11 @@ M.defaults = {
 		base_url = "http://localhost:8000",
 		model = "codellama:7b-code",
 		api_key_name = nil, -- Environment variable name for API key (optional)
-		max_tokens = nil, -- Optional: Maximum tokens to generate
+		max_tokens = 256, -- Maximum tokens to generate
 		temperature = nil, -- Optional: Sampling temperature (0.0 to 2.0)
+		top_p = nil, -- Optional: Top-p sampling parameter
+		top_k = nil, -- Optional: Top-k sampling parameter
+		repetition_penalty = nil, -- Optional: Repetition penalty parameter
 		timeout = 5000,
 		max_retries = 2,
 		parse_curl_args = nil, -- Optional custom curl args function
@@ -64,6 +67,27 @@ function M.validate(config)
 	if config.api.temperature ~= nil then
 		vim.validate({
 			["api.temperature"] = { config.api.temperature, "number" },
+		})
+	end
+
+	-- Validate top_p is number when set
+	if config.api.top_p ~= nil then
+		vim.validate({
+			["api.top_p"] = { config.api.top_p, "number" },
+		})
+	end
+
+	-- Validate top_k is number when set
+	if config.api.top_k ~= nil then
+		vim.validate({
+			["api.top_k"] = { config.api.top_k, "number" },
+		})
+	end
+
+	-- Validate repetition_penalty is number when set
+	if config.api.repetition_penalty ~= nil then
+		vim.validate({
+			["api.repetition_penalty"] = { config.api.repetition_penalty, "number" },
 		})
 	end
 

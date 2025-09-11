@@ -3,6 +3,9 @@ local utils = require("turbo-needle.utils")
 
 local M = {}
 
+-- Module-scoped enabled state (private)
+local enabled = true
+
 -- Completion cache
 local completion_cache = {
 	entries = {},
@@ -130,6 +133,8 @@ function M.setup_completion_trigger()
 	local debounce_delay = _config.completions.debounce_ms
 
 	local function trigger_completion()
+		if not enabled then return end
+
 		local state = get_buf_state()
 		-- Clear existing ghost text
 		M.clear_ghost_text()
@@ -251,6 +256,18 @@ function M.setup_completion_trigger()
 	vim.api.nvim_create_autocmd({ "InsertLeave", "CursorMovedI" }, {
 		callback = trigger_completion,
 	})
+end
+
+-- Enable completions
+function M.enable()
+	enabled = true
+	utils.notify("turbo-needle completions enabled", vim.log.levels.INFO)
+end
+
+-- Disable completions
+function M.disable()
+	enabled = false
+	utils.notify("turbo-needle completions disabled", vim.log.levels.INFO)
 end
 
 -- Completion function: extract context and request completion
