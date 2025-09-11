@@ -284,16 +284,16 @@ describe("turbo-needle", function()
 
 			-- Mock vim.api functions
 			local original_get_extmark = vim.api.nvim_buf_get_extmark_by_id
-			local original_put = vim.api.nvim_put
+			local original_set_text = vim.api.nvim_buf_set_text
 			local original_clear = turbo_needle.clear_ghost_text
 
-			local put_called = false
+			local set_text_called = false
 			local clear_called = false
 			vim.api.nvim_buf_get_extmark_by_id = function()
 				return { 0, 0, { virt_text = { { "inserted text", "Comment" } } } }
 			end
-			vim.api.nvim_put = function(text)
-				put_called = true
+			vim.api.nvim_buf_set_text = function(buf, start_row, start_col, end_row, end_col, text)
+				set_text_called = true
 				assert.are.equal("inserted text", text[1])
 			end
 			turbo_needle.clear_ghost_text = function()
@@ -302,12 +302,12 @@ describe("turbo-needle", function()
 
 			local result = turbo_needle.accept_completion()
 			assert.are.equal("", result)
-			assert.is_true(put_called)
+			assert.is_true(set_text_called)
 			assert.is_true(clear_called)
 
 			-- Restore
 			vim.api.nvim_buf_get_extmark_by_id = original_get_extmark
-			vim.api.nvim_put = original_put
+			vim.api.nvim_buf_set_text = original_set_text
 			turbo_needle.clear_ghost_text = original_clear
 		end)
 	end)
