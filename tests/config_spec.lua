@@ -23,7 +23,7 @@ describe("turbo-needle.config", function()
 
 		it("should have default completions settings", function()
 			local completions = config.defaults.completions
-			assert.are.equal(300, completions.debounce_ms)
+			assert.are.equal(600, completions.debounce_ms)
 		end)
 
 		it("should have default keymaps", function()
