@@ -50,7 +50,7 @@ describe("turbo-needle", function()
 				assert.are.equal("test prefix", data.prefix)
 				assert.are.equal("test suffix", data.suffix)
 				-- Simulate success
-				callback(nil, { content = "completed code" })
+				callback(nil, { choices = { { text = "completed code" } } })
 			end
 
 			-- Mock set_ghost_text

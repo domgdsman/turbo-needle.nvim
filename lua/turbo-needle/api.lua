@@ -61,14 +61,28 @@ function M.build_curl_args(provider_opts, code_opts)
 	end
 
 	local body = {
+		model = provider_opts.model,
 		prompt = build_fim_prompt(code_opts),
-		n_predict = provider_opts.max_tokens or 128,
-		temperature = provider_opts.temperature or 0.1,
-		stop = { "<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>" },
+		max_tokens = provider_opts.max_tokens or 256,
+		stream = false,
 	}
 
+	-- Add optional parameters if they are set
+	if provider_opts.temperature then
+		body.temperature = provider_opts.temperature
+	end
+	if provider_opts.top_p then
+		body.top_p = provider_opts.top_p
+	end
+	if provider_opts.top_k then
+		body.top_k = provider_opts.top_k
+	end
+	if provider_opts.repetition_penalty then
+		body.repetition_penalty = provider_opts.repetition_penalty
+	end
+
 	return {
-		url = provider_opts.base_url .. "/completion",
+		url = provider_opts.base_url .. "/v1/completions",
 		headers = headers,
 		body = body,
 		timeout = provider_opts.timeout,
@@ -176,10 +190,10 @@ function M.parse_response(result)
 		return ""
 	end
 
-	-- Handle llama.cpp completion response format
+	-- Handle OpenAI completion response format
 	local completion_text = nil
-	if result.content then
-		completion_text = result.content
+	if result.choices and result.choices[1] and result.choices[1].text then
+		completion_text = result.choices[1].text
 	end
 
 	-- Ensure completion_text is a string before processing

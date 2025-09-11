@@ -15,7 +15,7 @@ describe("turbo-needle.config", function()
 			assert.are.equal("http://localhost:8000", api.base_url)
 			assert.are.equal("codellama:7b-code", api.model)
 			assert.is_nil(api.api_key_name) -- Optional field, defaults to nil
-			assert.is_nil(api.max_tokens) -- Optional field, defaults to nil
+			assert.are.equal(256, api.max_tokens) -- Default value
 			assert.is_nil(api.temperature) -- Optional field, defaults to nil
 			assert.are.equal(5000, api.timeout)
 			assert.are.equal(2, api.max_retries)
