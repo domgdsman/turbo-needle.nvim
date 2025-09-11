@@ -392,6 +392,14 @@ function M.set_ghost_text(text)
 
 	local row, col = cursor[1] - 1, cursor[2] -- Convert to 0-based
 
+	-- Get current line to handle UTF-8 characters properly
+	local current_line = vim.api.nvim_get_current_line()
+	if current_line then
+		-- Adjust column position to account for UTF-8 multi-byte characters
+		local byte_col = vim.api.nvim_strwidth(current_line:sub(1, col + 1)) - 1
+		col = math.max(0, byte_col)
+	end
+
 	-- Create namespace
 	local ns_id = vim.api.nvim_create_namespace("turbo-needle-ghost")
 
@@ -412,9 +420,9 @@ function M.set_ghost_text(text)
 		local current_line_indent = ""
 
 		-- Get current line's indentation to preserve it in multi-line completions
-		local current_line = vim.api.nvim_get_current_line()
-		if current_line then
-			current_line_indent = current_line:match("^%s*") or ""
+		local current_line_content = vim.api.nvim_get_current_line()
+		if current_line_content then
+			current_line_indent = current_line_content:match("^%s*") or ""
 		end
 
 		for i, line in ipairs(lines) do
@@ -456,7 +464,7 @@ function M.set_ghost_text(text)
 
 		local success, singleline_extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
 			virt_text = { { display_text, "Comment" } },
-			virt_text_pos = "inline",
+			virt_text_pos = "overlay",
 			-- Add priority to ensure our ghost text appears above other extmarks
 			priority = 100,
 		})
@@ -516,9 +524,30 @@ function M.accept_completion()
 			if text_to_insert and type(text_to_insert) == "string" and text_to_insert ~= "" then
 				-- Split into lines for proper insertion
 				local lines = vim.split(text_to_insert, "\n", { plain = true })
-				vim.api.nvim_put(lines, "c", false, true)
-				M.clear_ghost_text()
-				return "" -- Don't insert tab
+
+				-- Use safer text insertion method with error handling
+				local insert_success = pcall(function()
+					-- Get current cursor position
+					local cursor = vim.api.nvim_win_get_cursor(0)
+					local row, col = cursor[1] - 1, cursor[2]
+
+					if #lines == 1 then
+						-- Single line: insert at cursor position
+						vim.api.nvim_buf_set_text(0, row, col, row, col, { lines[1] })
+					else
+						-- Multi-line: insert with proper line handling
+						local end_row = row + #lines - 1
+						local end_col = #lines[#lines]
+						vim.api.nvim_buf_set_text(0, row, col, end_row, end_col, lines)
+					end
+				end)
+
+				if insert_success then
+					M.clear_ghost_text()
+					return "" -- Don't insert tab
+				else
+					utils.notify("Failed to insert completion text", vim.log.levels.WARN)
+				end
 			end
 		end
 	end
