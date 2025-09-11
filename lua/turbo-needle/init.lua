@@ -457,4 +457,20 @@ function M.accept_completion()
 	return "\t"
 end
 
-return M
+-- Metatable for read-only 'enabled' property
+local mt = {
+	__index = function(t, k)
+		if k == 'enabled' then
+			return enabled  -- Return the private enabled value
+		end
+		return rawget(t, k)  -- Normal table access for other keys
+	end,
+	__newindex = function(t, k, v)
+		if k == 'enabled' then
+			error("Cannot set 'enabled' directly. Use enable() or disable() functions.", 2)
+		end
+		rawset(t, k, v)  -- Normal table assignment for other keys
+	end
+}
+
+return setmetatable(M, mt)
