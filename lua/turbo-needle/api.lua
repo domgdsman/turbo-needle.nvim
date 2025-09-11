@@ -1,5 +1,8 @@
 local M = {}
 
+-- Import plenary.job for async HTTP requests
+local Job = require("plenary.job")
+
 -- Optional user hook for customizing curl args
 M.custom_curl_args_hook = nil
 
@@ -89,64 +92,67 @@ function M.build_curl_args(provider_opts, code_opts)
 	}
 end
 
--- Execute HTTP request using vim.system() + curl
+-- Execute HTTP request using plenary.job + curl
 function M.request_completion(curl_args, callback)
-	-- Build curl command array
-	local cmd = { "curl", "-s", "-X", "POST" }
+	-- Build curl command arguments for plenary.job
+	local args = { "-s", "-X", "POST" }
 
 	-- Add headers
 	for k, v in pairs(curl_args.headers) do
-		table.insert(cmd, "-H")
-		table.insert(cmd, k .. ": " .. v)
+		table.insert(args, "-H")
+		table.insert(args, k .. ": " .. v)
 	end
 
-	-- Add timeout
-	table.insert(cmd, "--max-time")
-	table.insert(cmd, tostring(curl_args.timeout / 1000))
+	-- Add timeout (convert from milliseconds to seconds for curl)
+	table.insert(args, "--max-time")
+	table.insert(args, tostring(curl_args.timeout / 1000))
 
-	-- Add URL and data
-	table.insert(cmd, "-d")
-	table.insert(cmd, vim.json.encode(curl_args.body))
-	table.insert(cmd, curl_args.url)
+	-- Add data and URL
+	table.insert(args, "-d")
+	table.insert(args, vim.json.encode(curl_args.body))
+	table.insert(args, curl_args.url)
 
-	-- Execute with vim.system()
-	vim.system(cmd, {
-		text = true,
-		timeout = curl_args.timeout,
-	}, function(obj)
-		if not obj then
-			callback("System call failed: no response object", nil)
-			return
-		end
+	-- Execute with plenary.job
+	Job:new({
+		command = "curl",
+		args = args,
+		on_exit = function(job, return_val)
+			if return_val == 0 then
+				-- Get stdout from the job
+				local stdout = job:result()
+				local output = table.concat(stdout, "\n")
 
-		if obj.code == 0 then
-			-- Check if stdout exists and is not empty
-			if not obj.stdout or obj.stdout == "" then
-				callback("Empty response from server", nil)
-				return
-			end
-
-			local success, result = pcall(vim.json.decode, obj.stdout)
-			if success and result then
-				callback(nil, result)
-			else
-				-- Try to provide more context about the JSON error
-				local error_detail = "Invalid JSON response"
-				if not success and result then
-					error_detail = error_detail .. ": " .. tostring(result)
+				-- Check if output exists and is not empty
+				if not output or output == "" then
+					callback("Empty response from server", nil)
+					return
 				end
-				callback(error_detail, nil)
+
+				local success, result = pcall(vim.json.decode, output)
+				if success and result then
+					callback(nil, result)
+				else
+					-- Try to provide more context about the JSON error
+					local error_detail = "Invalid JSON response"
+					if not success and result then
+						error_detail = error_detail .. ": " .. tostring(result)
+					end
+					callback(error_detail, nil)
+				end
+			else
+				local error_msg = "HTTP error: " .. tostring(return_val or "unknown")
+
+				-- Get stderr from the job
+				local stderr = job:stderr_result()
+				if stderr and #stderr > 0 then
+					local stderr_msg = table.concat(stderr, "\n"):match("^%s*(.-)%s*$") or table.concat(stderr, "\n")
+					error_msg = error_msg .. " - " .. stderr_msg
+				end
+
+				callback(error_msg, nil)
 			end
-		else
-			local error_msg = "HTTP error: " .. tostring(obj.code or "unknown")
-			if obj.stderr and obj.stderr ~= "" then
-				-- Safely extract error message
-				local stderr_msg = obj.stderr:match("^%s*(.-)%s*$") or obj.stderr
-				error_msg = error_msg .. " - " .. stderr_msg
-			end
-			callback(error_msg, nil)
-		end
-	end)
+		end,
+	}):start()
 end
 
 -- Main completion request function
