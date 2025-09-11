@@ -391,14 +391,10 @@ function M.set_ghost_text(text)
 	end
 
 	local row, col = cursor[1] - 1, cursor[2] -- Convert to 0-based
-
-	-- Get current line to handle UTF-8 characters properly
-	local current_line = vim.api.nvim_get_current_line()
-	if current_line then
-		-- Adjust column position to account for UTF-8 multi-byte characters
-		local byte_col = vim.api.nvim_strwidth(current_line:sub(1, col + 1)) - 1
-		col = math.max(0, byte_col)
-	end
+	-- For inline virtual text, place extmark at cursor position
+	-- The inline mode will handle positioning the text after existing content
+	-- Debug: print positions
+	-- print(string.format("Ghost text position: row=%d, col=%d", row, col))
 
 	-- Create namespace
 	local ns_id = vim.api.nvim_create_namespace("turbo-needle-ghost")
@@ -464,7 +460,7 @@ function M.set_ghost_text(text)
 
 		local success, singleline_extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
 			virt_text = { { display_text, "Comment" } },
-			virt_text_pos = "overlay",
+			virt_text_pos = "inline",
 			-- Add priority to ensure our ghost text appears above other extmarks
 			priority = 100,
 		})
@@ -527,18 +523,20 @@ function M.accept_completion()
 
 				-- Use safer text insertion method with error handling
 				local insert_success = pcall(function()
-					-- Get current cursor position
+					-- Use current cursor position for insertion (where user wants the text)
 					local cursor = vim.api.nvim_win_get_cursor(0)
-					local row, col = cursor[1] - 1, cursor[2]
+					local cursor_row, cursor_col = cursor[1] - 1, cursor[2]
+					-- Debug: print insertion positions
+					-- print(string.format("Insert position: row=%d, col=%d, text='%s'", cursor_row, cursor_col, lines[1] or ""))
 
 					if #lines == 1 then
 						-- Single line: insert at cursor position
-						vim.api.nvim_buf_set_text(0, row, col, row, col, { lines[1] })
+						vim.api.nvim_buf_set_text(0, cursor_row, cursor_col, cursor_row, cursor_col, { lines[1] })
 					else
 						-- Multi-line: insert with proper line handling
-						local end_row = row + #lines - 1
+						local end_row = cursor_row + #lines - 1
 						local end_col = #lines[#lines]
-						vim.api.nvim_buf_set_text(0, row, col, end_row, end_col, lines)
+						vim.api.nvim_buf_set_text(0, cursor_row, cursor_col, end_row, end_col, lines)
 					end
 				end)
 
