@@ -22,7 +22,7 @@ M.defaults = {
 		-- end
 	},
 	completions = {
-		debounce_ms = 300,
+		debounce_ms = 600,
 	},
 	keymaps = {
 		accept = "<Tab>",

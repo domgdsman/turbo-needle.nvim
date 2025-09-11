@@ -24,6 +24,7 @@ local function get_buf_state()
 			debounce_timer = nil,
 			current_extmark = nil,
 			active_request_id = nil, -- Track active API request ID
+			active_job = nil, -- Track active plenary.job for cancellation
 			request_counter = 0, -- Counter for generating unique request IDs
 		}
 	end
@@ -198,6 +199,13 @@ function M.setup_completion_trigger()
 			-- Cancel active request by incrementing counter
 			state.request_counter = state.request_counter + 1
 			state.active_request_id = nil
+			-- Cancel active job
+			if state.active_job then
+				pcall(function()
+					state.active_job:shutdown()
+				end)
+				state.active_job = nil
+			end
 			M.clear_ghost_text()
 		end,
 	})
@@ -217,6 +225,12 @@ function M.setup_completion_trigger()
 							vim.fn.timer_stop(state.debounce_timer)
 						end)
 					end
+				end
+				-- Cancel active job
+				if state.active_job then
+					pcall(function()
+						state.active_job:shutdown()
+					end)
 				end
 				M._buf_states[bufnr] = nil
 			end
@@ -288,19 +302,29 @@ function M.complete()
 		return
 	end
 
+	-- Cancel any existing job before starting a new request
+	if state.active_job then
+		pcall(function()
+			state.active_job:shutdown()
+		end)
+		state.active_job = nil
+	end
+
 	-- Create a unique request ID to track this request
 	state.request_counter = state.request_counter + 1
 	local request_id = state.request_counter
 	state.active_request_id = request_id
 
-	api.get_completion({ prefix = ctx.prefix, suffix = ctx.suffix }, function(err, result)
+	-- Start the new request and store the job for potential cancellation
+	state.active_job = api.get_completion({ prefix = ctx.prefix, suffix = ctx.suffix }, function(err, result)
 		-- Check if this request was cancelled (newer request started)
 		if state.active_request_id ~= request_id then
 			return -- Request was cancelled, ignore result
 		end
 
-		-- Clear the active request
+		-- Clear the active request and job
 		state.active_request_id = nil
+		state.active_job = nil
 
 		if err then
 			utils.notify("Completion error: " .. err, vim.log.levels.ERROR)
@@ -368,17 +392,48 @@ function M.set_ghost_text(text)
 
 	-- Handle multi-line text
 	if text:find("\n") then
-		-- Multi-line completion: use virt_lines for better display
+		-- Multi-line completion: use virt_lines with smart positioning
 		local lines = vim.split(text, "\n", { plain = true })
-		local virt_lines = {}
 
-		for _, line in ipairs(lines) do
-			table.insert(virt_lines, { { line, "Comment" } })
+		-- Limit the number of lines shown to prevent overwhelming the UI
+		local max_lines = 10
+		if #lines > max_lines then
+			lines = vim.list_slice(lines, 1, max_lines)
+			-- Add a truncation indicator
+			lines[max_lines] = lines[max_lines] .. "..."
 		end
 
+		local virt_lines = {}
+		local current_line_indent = ""
+
+		-- Get current line's indentation to preserve it in multi-line completions
+		local current_line = vim.api.nvim_get_current_line()
+		if current_line then
+			current_line_indent = current_line:match("^%s*") or ""
+		end
+
+		for i, line in ipairs(lines) do
+			local display_line = line
+			-- For continuation lines, preserve relative indentation
+			if i > 1 and line:match("^%s*") then
+				-- Remove existing indentation and add current line's indentation
+				display_line = current_line_indent .. line:gsub("^%s*", "")
+			end
+
+			-- Truncate very long lines
+			if #display_line > 100 then
+				display_line = display_line:sub(1, 97) .. "..."
+			end
+
+			table.insert(virt_lines, { { display_line, "Comment" } })
+		end
+
+		-- Use better positioning for multi-line completions
 		local success, multiline_extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
 			virt_lines = virt_lines,
 			virt_text_pos = "overlay",
+			-- Add priority to ensure our ghost text appears above other extmarks
+			priority = 100,
 		})
 		if not success then
 			utils.notify("Failed to set multi-line ghost text extmark", vim.log.levels.ERROR)
@@ -386,10 +441,19 @@ function M.set_ghost_text(text)
 		end
 		state.current_extmark = { ns_id = ns_id, id = multiline_extmark_id }
 	else
-		-- Single line completion
+		-- Single line completion with smart positioning
+		local display_text = text
+
+		-- Truncate very long single-line completions
+		if #display_text > 100 then
+			display_text = display_text:sub(1, 97) .. "..."
+		end
+
 		local success, singleline_extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
-			virt_text = { { text, "Comment" } },
+			virt_text = { { display_text, "Comment" } },
 			virt_text_pos = "inline",
+			-- Add priority to ensure our ghost text appears above other extmarks
+			priority = 100,
 		})
 		if not success then
 			utils.notify("Failed to set ghost text extmark", vim.log.levels.ERROR)
