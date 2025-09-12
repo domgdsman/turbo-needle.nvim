@@ -27,6 +27,7 @@ local function get_buf_state()
  			active_job = nil, -- Track active plenary.job for cancellation
  			request_counter = 0, -- Counter for generating unique request IDs
  			cached_completion = nil, -- Cache original completion text
+ 			cursor_position = nil, -- Store cursor position when setting ghost text
  		}
  	end
 	return M._buf_states[bufnr]
@@ -289,6 +290,11 @@ end
 
 -- Completion function: extract context and request completion
 function M.complete()
+	-- Only trigger completions in insert mode
+	if vim.api.nvim_get_mode().mode ~= "i" then
+		return
+	end
+
 	local context = require("turbo-needle.context")
 	if not context.is_filetype_supported() then
 		return
@@ -375,10 +381,17 @@ function M.clear_ghost_text()
 	end
 	-- Clear cached completion text
 	state.cached_completion = nil
+	-- Clear stored cursor position
+	state.cursor_position = nil
 end
 
 -- Set ghost text at cursor
 function M.set_ghost_text(text)
+	-- Only show ghost text in insert mode
+	if vim.api.nvim_get_mode().mode ~= "i" then
+		return
+	end
+
 	local state = get_buf_state()
 	M.clear_ghost_text()
 
@@ -397,6 +410,8 @@ function M.set_ghost_text(text)
 	end
 
 	local row, col = cursor[1] - 1, cursor[2] -- Convert to 0-based
+	-- Store cursor position for validation during acceptance
+	state.cursor_position = { row = cursor[1] - 1, col = cursor[2] }
 	-- For inline virtual text, place extmark at cursor position
 	-- The inline mode will handle positioning the text after existing content
 	-- Debug: print positions
@@ -482,6 +497,17 @@ end
 function M.accept_completion()
 	local state = get_buf_state()
 	if state.cached_completion then
+		-- Validate cursor position hasn't changed
+		local current_cursor = vim.api.nvim_win_get_cursor(0)
+		local current_row, current_col = current_cursor[1] - 1, current_cursor[2]
+
+		if not state.cursor_position or
+		   state.cursor_position.row ~= current_row or
+		   state.cursor_position.col ~= current_col then
+			-- Cursor has moved, don't accept completion
+			return "\t"
+		end
+
 		-- Use cached completion text for reliable insertion
 		local text_to_insert = state.cached_completion
 
