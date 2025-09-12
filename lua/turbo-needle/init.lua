@@ -19,15 +19,16 @@ local function get_buf_state()
 	if not M._buf_states then
 		M._buf_states = {}
 	end
-	if not M._buf_states[bufnr] then
-		M._buf_states[bufnr] = {
-			debounce_timer = nil,
-			current_extmark = nil,
-			active_request_id = nil, -- Track active API request ID
-			active_job = nil, -- Track active plenary.job for cancellation
-			request_counter = 0, -- Counter for generating unique request IDs
-		}
-	end
+ 	if not M._buf_states[bufnr] then
+ 		M._buf_states[bufnr] = {
+ 			debounce_timer = nil,
+ 			current_extmark = nil,
+ 			active_request_id = nil, -- Track active API request ID
+ 			active_job = nil, -- Track active plenary.job for cancellation
+ 			request_counter = 0, -- Counter for generating unique request IDs
+ 			cached_completion = nil, -- Cache original completion text
+ 		}
+ 	end
 	return M._buf_states[bufnr]
 end
 
@@ -372,6 +373,8 @@ function M.clear_ghost_text()
 		end
 		state.current_extmark = nil
 	end
+	-- Clear cached completion text
+	state.cached_completion = nil
 end
 
 -- Set ghost text at cursor
@@ -383,6 +386,9 @@ function M.set_ghost_text(text)
 	if not text or text == "" or type(text) ~= "string" then
 		return
 	end
+
+	-- Cache the original completion text
+	state.cached_completion = text
 
 	-- Get cursor position
 	local cursor = vim.api.nvim_win_get_cursor(0)
@@ -440,9 +446,9 @@ function M.set_ghost_text(text)
 		-- Use better positioning for multi-line completions
 		local success, multiline_extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
 			virt_lines = virt_lines,
-			virt_text_pos = "overlay",
+			virt_text_pos = "eol",
 			-- Add priority to ensure our ghost text appears above other extmarks
-			priority = 100,
+			priority = 200,
 		})
 		if not success then
 			utils.notify("Failed to set multi-line ghost text extmark", vim.log.levels.ERROR)
@@ -462,7 +468,7 @@ function M.set_ghost_text(text)
 			virt_text = { { display_text, "Comment" } },
 			virt_text_pos = "inline",
 			-- Add priority to ensure our ghost text appears above other extmarks
-			priority = 100,
+			priority = 200,
 		})
 		if not success then
 			utils.notify("Failed to set ghost text extmark", vim.log.levels.ERROR)
@@ -475,97 +481,38 @@ end
 -- Accept completion: insert ghost text if present, else return tab
 function M.accept_completion()
 	local state = get_buf_state()
-	if state.current_extmark then
-		-- Debug: Log extmark state (uncomment for debugging)
-		-- print(string.format("Debug: accept_completion - extmark exists: ns_id=%s, id=%s",
-		-- 	tostring(state.current_extmark.ns_id), tostring(state.current_extmark.id)))
+	if state.cached_completion then
+		-- Use cached completion text for reliable insertion
+		local text_to_insert = state.cached_completion
 
-		-- Safely get the extmark details
-		local success, extmark = pcall(
-			vim.api.nvim_buf_get_extmark_by_id,
-			0,
-			state.current_extmark.ns_id,
-			state.current_extmark.id,
-			{ details = true }
-		)
+		-- Split into lines for proper insertion
+		local lines = vim.split(text_to_insert, "\n", { plain = true })
 
-		if not success then
-			utils.notify("Failed to retrieve ghost text details", vim.log.levels.WARN)
-			return "\t"
-		end
+		-- Use safer text insertion method with error handling
+		local insert_success = pcall(function()
+			-- Use current cursor position for insertion (where user wants the text)
+			local cursor = vim.api.nvim_win_get_cursor(0)
+			local cursor_row, cursor_col = cursor[1] - 1, cursor[2]
 
-		if not extmark or #extmark < 3 then
-			utils.notify("Ghost text extmark is invalid", vim.log.levels.WARN)
-			return "\t"
-		end
-
-		local details = extmark[3]
-		if not details then
-			utils.notify("Ghost text details not found", vim.log.levels.WARN)
-			return "\t"
-		end
-		local text_to_insert = nil
-
-		-- Handle multi-line completion (virt_lines)
-		if details.virt_lines and type(details.virt_lines) == "table" then
-			local lines = {}
-			for _, line_parts in ipairs(details.virt_lines) do
-				if type(line_parts) == "table" and line_parts[1] then
-					if type(line_parts[1]) == "table" and line_parts[1][1] then
-						table.insert(lines, line_parts[1][1])
-					elseif type(line_parts[1]) == "string" then
-						table.insert(lines, line_parts[1])
-					else
-						table.insert(lines, "")
-					end
-				else
-					table.insert(lines, "")
-				end
-			end
-			if #lines > 0 then
-				text_to_insert = table.concat(lines, "\n")
-			end
-		-- Handle single-line completion (virt_text)
-		elseif details.virt_text and type(details.virt_text) == "table" then
-			if details.virt_text[1] then
-				if type(details.virt_text[1]) == "table" and details.virt_text[1][1] then
-					text_to_insert = details.virt_text[1][1]
-				elseif type(details.virt_text[1]) == "string" then
-					text_to_insert = details.virt_text[1]
-				end
-			end
-		end
-
-		if text_to_insert and type(text_to_insert) == "string" and text_to_insert ~= "" then
-			-- Split into lines for proper insertion
-			local lines = vim.split(text_to_insert, "\n", { plain = true })
-
-			-- Use safer text insertion method with error handling
-			local insert_success = pcall(function()
-				-- Use current cursor position for insertion (where user wants the text)
-				local cursor = vim.api.nvim_win_get_cursor(0)
-				local cursor_row, cursor_col = cursor[1] - 1, cursor[2]
-
-				if #lines == 1 then
-					-- Single line: insert at cursor position
-					vim.api.nvim_buf_set_text(0, cursor_row, cursor_col, cursor_row, cursor_col, { lines[1] })
-				else
-					-- Multi-line: insert with proper line handling
-					local end_row = cursor_row + #lines - 1
-					local end_col = #lines[#lines]
-					vim.api.nvim_buf_set_text(0, cursor_row, cursor_col, end_row, end_col, lines)
-				end
-			end)
-
-			if insert_success then
-				M.clear_ghost_text()
-				return "" -- Don't insert tab
+			if #lines == 1 then
+				-- Single line: insert at cursor position
+				vim.api.nvim_buf_set_text(0, cursor_row, cursor_col, cursor_row, cursor_col, { lines[1] })
 			else
-				utils.notify("Failed to insert completion text", vim.log.levels.WARN)
+				-- Multi-line: insert with proper line handling
+				local end_row = cursor_row + #lines - 1
+				local end_col = #lines[#lines]
+				vim.api.nvim_buf_set_text(0, cursor_row, cursor_col, end_row, end_col, lines)
 			end
+		end)
+
+		if insert_success then
+			M.clear_ghost_text()
+			return "" -- Don't insert tab
+		else
+			utils.notify("Failed to insert completion text", vim.log.levels.WARN)
 		end
 	end
-	-- No ghost text, insert tab
+	-- No cached completion, insert tab
 	return "\t"
 end
 
