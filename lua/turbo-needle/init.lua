@@ -537,10 +537,24 @@ function M.accept_completion()
 				end
 				vim.api.nvim_buf_set_text(0, cursor_row, insert_col, cursor_row, insert_col, { lines[1] })
 			else
-				-- Multi-line: insert with proper line handling
-				local end_row = cursor_row + #lines - 1
-				local end_col = #lines[#lines]
-				vim.api.nvim_buf_set_text(0, cursor_row, cursor_col, end_row, end_col, lines)
+				-- Multi-line insertion strategy:
+				-- 1. Merge first completion line into current line at cursor without deleting any existing trailing text.
+				-- 2. Insert remaining completion lines as new lines directly below the current line.
+
+				local current_line = vim.api.nvim_get_current_line()
+				local before = current_line:sub(1, cursor_col)
+				local after = current_line:sub(cursor_col + 1)
+				local merged_first = before .. lines[1] .. after
+				-- Replace current line with merged result
+				vim.api.nvim_buf_set_lines(0, cursor_row, cursor_row + 1, false, { merged_first })
+				-- Insert remaining lines if any
+				if #lines > 1 then
+					local tail = {}
+					for i = 2, #lines do
+						tail[#tail + 1] = lines[i]
+					end
+					vim.api.nvim_buf_set_lines(0, cursor_row + 1, cursor_row + 1, false, tail)
+				end
 			end
 		end)
 
