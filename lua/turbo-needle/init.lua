@@ -540,8 +540,7 @@ function M.accept_completion()
 				dbg_context.insert_first = lines[1]
 				dbg_context.tail_count = #lines - 1
 
-				local cursor = vim.api.nvim_win_get_cursor(0)
-				local cursor_row, cursor_col = cursor[1] - 1, cursor[2]
+				-- Reuse earlier cursor_row/col to avoid shadowing and keep consistent position
 				local before = line_text:sub(1, cursor_col)
 				local after = line_text:sub(cursor_col + 1)
 				dbg_context.before = before
