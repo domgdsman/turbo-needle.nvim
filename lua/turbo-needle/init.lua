@@ -564,11 +564,47 @@ function M.accept_completion()
 			M.clear_ghost_text()
 			return ""
 		else
-			-- Expose detailed diagnostics once
+			local err_msg = tostring(insert_err)
+			-- Handle textlock (E565) by scheduling the insertion
+			if err_msg:match("E565") then
+				local cached = state.cached_completion
+				local stored_pos = state.cursor_position and { row = state.cursor_position.row, col = state.cursor_position.col }
+				local lines_copy = vim.split(cached or "", "\n", { plain = true })
+				vim.schedule(function()
+					-- Revalidate state & cursor
+					if not cached or not stored_pos then return end
+					local cur = vim.api.nvim_win_get_cursor(0)
+					local row = cur[1] - 1
+					local col = cur[2]
+					if row ~= stored_pos.row then return end
+					if #lines_copy == 1 then
+						local line_text = vim.api.nvim_get_current_line()
+						local line_len = #line_text
+						if col > line_len then col = line_len end
+						if col == line_len - 1 then col = line_len end
+						pcall(vim.api.nvim_buf_set_text, 0, row, col, row, col, { lines_copy[1] })
+					else
+						local line_text = vim.api.nvim_get_current_line()
+						local before = line_text:sub(1, col)
+						local after = line_text:sub(col + 1)
+						local merged_first = before .. lines_copy[1] .. after
+						local ok1 = pcall(vim.api.nvim_buf_set_lines, 0, row, row + 1, false, { merged_first })
+						if ok1 and #lines_copy > 1 then
+							local tail = {}
+							for i = 2, #lines_copy do tail[#tail + 1] = lines_copy[i] end
+							pcall(vim.api.nvim_buf_set_lines, 0, row + 1, row + 1, false, tail)
+						end
+					end
+					M.clear_ghost_text()
+				end)
+				-- Do not treat as failure for user; insertion is pending
+				return ""
+			end
+
 			utils.notify(
 				string.format(
 					"Insertion error: %s | ctx=%s",
-					tostring(insert_err),
+					err_msg,
 					vim.inspect(dbg_context)
 				),
 				vim.log.levels.ERROR
