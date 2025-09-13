@@ -202,23 +202,33 @@ describe("turbo-needle ghost integration", function()
 		assert.are.equal(1, api_called, "API should be called exactly once")
 		assert.is_true(#ghost_calls > 0, "Ghost extmark expected")
 		local ghost = ghost_calls[#ghost_calls]
-		assert.is_nil(ghost.opts.virt_text, "Should not use single-line virt_text for multi-line completion")
-		assert.is_table(ghost.opts.virt_lines, "virt_lines expected for multi-line")
+		-- Hybrid rendering: first line should be inline via virt_text, remainder via virt_lines
+		assert.is_table(ghost.opts.virt_text, "virt_text expected for first line inline in multi-line completion")
+		assert.is_true(#ghost.opts.virt_text > 0, "virt_text should contain at least the head line")
+		assert.are.equal(mocked_completion:match("^[^\n]+"), ghost.opts.virt_text[1][1], "Inline head line mismatch")
+		assert.is_table(ghost.opts.virt_lines, "virt_lines expected for continuation lines in multi-line completion")
 
-		-- Build expected virt_lines (respect indentation rules in implementation)
-		local expected_lines_raw = vim.split(mocked_completion, "\n", { plain = true })
-		local expected_virt = {}
+		-- Build expected virt_lines (tail only, since head rendered inline)
+		local all_lines = vim.split(mocked_completion, "\n", { plain = true })
 		local indent = string.match(line_text, "^%s*") or ""
-		for i, l in ipairs(expected_lines_raw) do
+		local expected_tail = {}
+		for i = 2, #all_lines do
+			local l = all_lines[i]
 			local display_line = l
-			if i > 1 and l:match("^%s*") then
+			if l:match("^%s*") then
 				-- Implementation re-indents continuation lines with current line indent
 				display_line = indent .. l:gsub("^%s*", "")
 			end
-			expected_virt[#expected_virt + 1] = { { display_line, "Comment" } }
+			if #display_line > 100 then
+				display_line = display_line:sub(1, 97) .. "..."
+			end
+			expected_tail[#expected_tail + 1] = { { display_line, "Comment" } }
 		end
-		-- Compare number of lines (content already validated in insertion section below if needed)
-		assert.are.equal(#expected_virt, #ghost.opts.virt_lines, "virt_lines length mismatch")
+		assert.are.equal(#expected_tail, #ghost.opts.virt_lines, "virt_lines length mismatch (tail lines)")
+		-- Optionally verify each tail line text (keeps test precise but resilient to highlight group consistency)
+		for i, seg in ipairs(expected_tail) do
+			assert.are.equal(seg[1][1], ghost.opts.virt_lines[i][1][1], string.format("virt_lines tail line %d mismatch", i))
+		end
 
 		-- Accept multi-line completion
 		local accept_result = turbo_needle.accept_completion()
