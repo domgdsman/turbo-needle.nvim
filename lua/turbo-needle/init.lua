@@ -505,6 +505,7 @@ function M.accept_completion()
 		-- Instrumentation locals
 		local dbg_context = {}
 
+		local final_cursor -- will hold { row = <0-based>, col = <0-based> }
 		local insert_ok, insert_err = pcall(function()
 			local cursor = vim.api.nvim_win_get_cursor(0)
 			local cursor_row, cursor_col = cursor[1] - 1, cursor[2]
@@ -532,6 +533,8 @@ function M.accept_completion()
 				end
 
 				vim.api.nvim_buf_set_text(0, cursor_row, col, cursor_row, col, { lines[1] })
+				-- Final cursor: same line, after inserted fragment (but before any original trailing text)
+				final_cursor = { row = cursor_row, col = col + #lines[1] }
 			else
 				-- Multi-line path
 				local line_text = vim.api.nvim_get_current_line()
@@ -555,12 +558,21 @@ function M.accept_completion()
 						tail[#tail + 1] = lines[i]
 					end
 					vim.api.nvim_buf_set_lines(0, cursor_row + 1, cursor_row + 1, false, tail)
+					-- Final cursor: last inserted line end
+					final_cursor = { row = cursor_row + (#lines - 1), col = #lines[#lines] }
+				else
+					-- Should not reach here (single line handled above) but safe guard
+					final_cursor = { row = cursor_row, col = cursor_col + #lines[1] }
 				end
 			end
 		end)
 
 		if insert_ok then
 			M.clear_ghost_text()
+			-- Apply computed final cursor position if available
+			if final_cursor and final_cursor.row and final_cursor.col then
+				pcall(vim.api.nvim_win_set_cursor, 0, { final_cursor.row + 1, final_cursor.col })
+			end
 			return ""
 		else
 			local err_msg = tostring(insert_err)
@@ -576,12 +588,15 @@ function M.accept_completion()
 					local row = cur[1] - 1
 					local col = cur[2]
 					if row ~= stored_pos.row then return end
+					local sched_final
 					if #lines_copy == 1 then
 						local line_text = vim.api.nvim_get_current_line()
 						local line_len = #line_text
 						if col > line_len then col = line_len end
 						if col == line_len - 1 then col = line_len end
-						pcall(vim.api.nvim_buf_set_text, 0, row, col, row, col, { lines_copy[1] })
+						if pcall(vim.api.nvim_buf_set_text, 0, row, col, row, col, { lines_copy[1] }) then
+							sched_final = { row = row, col = col + #lines_copy[1] }
+						end
 					else
 						local line_text = vim.api.nvim_get_current_line()
 						local before = line_text:sub(1, col)
@@ -591,10 +606,15 @@ function M.accept_completion()
 						if ok1 and #lines_copy > 1 then
 							local tail = {}
 							for i = 2, #lines_copy do tail[#tail + 1] = lines_copy[i] end
-							pcall(vim.api.nvim_buf_set_lines, 0, row + 1, row + 1, false, tail)
+							if pcall(vim.api.nvim_buf_set_lines, 0, row + 1, row + 1, false, tail) then
+								sched_final = { row = row + (#lines_copy - 1), col = #lines_copy[#lines_copy] }
+							end
 						end
 					end
 					M.clear_ghost_text()
+					if sched_final then
+						pcall(vim.api.nvim_win_set_cursor, 0, { sched_final.row + 1, sched_final.col })
+					end
 				end)
 				-- Do not treat as failure for user; insertion is pending
 				return ""
