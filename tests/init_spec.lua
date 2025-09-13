@@ -397,14 +397,60 @@ describe("turbo-needle", function()
 			local ret = turbo_needle.accept_completion()
 			assert.are.equal("", ret, "Accepting a ghost completion should return empty string to suppress <Tab>")
 
-			-- Validate buffer content updated
+			-- Validate buffer content updated & cursor moved to end of inserted text
 			local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 			assert.are.equal("local x = 1 -- appended", lines[1])
+			local cur = vim.api.nvim_win_get_cursor(0)
+			-- Row should remain first line, column at end of new text
+			assert.are.equal(1, cur[1])
+			assert.are.equal(#"local x = 1 -- appended" - 1, cur[2])
 			-- State cleared
 			assert.is_nil(state.cached_completion)
 			assert.is_nil(state.current_extmark)
 
 			-- Cleanup
+			vim.api.nvim_create_namespace = original_create_ns
+			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
+			vim.api.nvim_get_mode = original_get_mode
+			vim.api.nvim_buf_delete(bufnr, { force = true })
+		end)
+
+		it("should position cursor at end after multi-line insertion", function()
+			local original_get_mode = vim.api.nvim_get_mode
+			vim.api.nvim_get_mode = function() return { mode = "i" } end
+
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_set_current_buf(bufnr)
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "function test()" })
+			vim.api.nvim_win_set_cursor(0, {1, #"function test()"})
+
+			local original_create_ns = vim.api.nvim_create_namespace
+			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
+			vim.api.nvim_create_namespace = function() return 101 end
+			vim.api.nvim_buf_set_extmark = function() return 202 end
+
+			local completion = "\n  local x = 1\n  return x"
+			-- Provide a multi-line ghost text starting with a newline to mimic FIM middle insert tail
+			-- For display we just set it directly
+			turbo_needle.set_ghost_text(completion)
+			local state = turbo_needle._buf_states[bufnr]
+			assert.is_not_nil(state.cached_completion)
+
+			-- Accept
+			local ret = turbo_needle.accept_completion()
+			assert.are.equal("", ret)
+
+			-- Validate lines and cursor
+			local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+			assert.are.same({
+				"function test()", -- first line merged (no change since first line of completion empty before leading newline)
+				"  local x = 1",
+				"  return x",
+			}, lines)
+			local cur = vim.api.nvim_win_get_cursor(0)
+			assert.are.equal(3, cur[1]) -- third line
+			assert.are.equal(#"  return x" - 1, cur[2])
+
 			vim.api.nvim_create_namespace = original_create_ns
 			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
 			vim.api.nvim_get_mode = original_get_mode

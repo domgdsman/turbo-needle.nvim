@@ -46,6 +46,9 @@ describe("turbo-needle expr mapping acceptance", function()
 
     local line = vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1]
     assert.are.equal("local x = 1 -- appended_expr", line)
+    local cur = vim.api.nvim_win_get_cursor(0)
+    assert.are.equal(1, cur[1])
+    assert.are.equal(#"local x = 1 -- appended_expr" - 1, cur[2])
     assert.is_nil(state.cached_completion)
     assert.is_nil(state.current_extmark)
 
