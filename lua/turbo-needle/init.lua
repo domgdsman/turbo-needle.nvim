@@ -377,9 +377,14 @@ end
 function M.clear_ghost_text()
 	local state = get_buf_state()
 	if state.current_extmark then
-		local success = pcall(vim.api.nvim_buf_del_extmark, 0, state.current_extmark.ns_id, state.current_extmark.id)
-		if not success then
-			utils.notify("Failed to clear ghost text extmark", vim.log.levels.WARN)
+		-- Always attempt deletion so tests detecting call still pass; suppress benign 'invalid extmark' errors
+		local ok, err = pcall(vim.api.nvim_buf_del_extmark, 0, state.current_extmark.ns_id, state.current_extmark.id)
+		if not ok then
+			local msg = tostring(err)
+			-- Only warn if it's not a common already-cleared scenario
+			if not (msg:match("Invalid extmark id") or msg:match("Invalid namespace id")) then
+				utils.notify("Failed to clear ghost text extmark", vim.log.levels.WARN)
+			end
 		end
 		state.current_extmark = nil
 	end
@@ -399,101 +404,84 @@ function M.set_ghost_text(text)
 	local state = get_buf_state()
 	M.clear_ghost_text()
 
-	-- Validate input
 	if not text or text == "" or type(text) ~= "string" then
 		return
 	end
 
-	-- Cache the original completion text
 	state.cached_completion = text
 
-	-- Get cursor position
 	local cursor = vim.api.nvim_win_get_cursor(0)
 	if not cursor or #cursor < 2 then
 		return
 	end
+	local row, col = cursor[1] - 1, cursor[2]
+	state.cursor_position = { row = row, col = col }
 
-	local row, col = cursor[1] - 1, cursor[2] -- Convert to 0-based
-	-- Store cursor position for validation during acceptance
-	state.cursor_position = { row = cursor[1] - 1, col = cursor[2] }
-	-- For inline virtual text, place extmark at cursor position
-	-- The inline mode will handle positioning the text after existing content
-	-- Debug: print positions
-	-- print(string.format("Ghost text position: row=%d, col=%d", row, col))
-
-	-- Create namespace
 	local ns_id = vim.api.nvim_create_namespace("turbo-needle-ghost")
 
-	-- Handle multi-line text
 	if text:find("\n") then
-		-- Multi-line completion: use virt_lines with smart positioning
+		-- Hybrid: first line inline, remaining lines as virt_lines
 		local lines = vim.split(text, "\n", { plain = true })
+		if #lines == 0 then
+			return
+		end
 
-		-- Limit the number of lines shown to prevent overwhelming the UI
 		local max_lines = 10
 		if #lines > max_lines then
 			lines = vim.list_slice(lines, 1, max_lines)
-			-- Add a truncation indicator
-			lines[max_lines] = lines[max_lines] .. "..."
+			lines[#lines] = lines[#lines] .. "..."
 		end
 
-		local virt_lines = {}
-		local current_line_indent = ""
-
-		-- Get current line's indentation to preserve it in multi-line completions
-		local current_line_content = vim.api.nvim_get_current_line()
-		if current_line_content then
-			current_line_indent = current_line_content:match("^%s*") or ""
+		local head = lines[1]
+		local tail = {}
+		for i = 2, #lines do
+			tail[#tail + 1] = lines[i]
 		end
 
-		for i, line in ipairs(lines) do
-			local display_line = line
-			-- For continuation lines, preserve relative indentation
-			if i > 1 and line:match("^%s*") then
-				-- Remove existing indentation and add current line's indentation
-				display_line = current_line_indent .. line:gsub("^%s*", "")
+		-- Prepare virt_lines for tail with indentation alignment
+		local virt_lines = nil
+		if #tail > 0 then
+			virt_lines = {}
+			local current_line = vim.api.nvim_get_current_line()
+			local base_indent = (current_line and current_line:match("^%s*")) or ""
+			for _, l in ipairs(tail) do
+				local display_line = l
+				if l:match("^%s*") then
+					display_line = base_indent .. l:gsub("^%s*", "")
+				end
+				if #display_line > 100 then
+					display_line = display_line:sub(1, 97) .. "..."
+				end
+				table.insert(virt_lines, { { display_line, "Comment" } })
 			end
-
-			-- Truncate very long lines
-			if #display_line > 100 then
-				display_line = display_line:sub(1, 97) .. "..."
-			end
-
-			table.insert(virt_lines, { { display_line, "Comment" } })
 		end
 
-		-- Use better positioning for multi-line completions
-		local success, multiline_extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
+		local ok, id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
+			virt_text = { { head, "Comment" } }, -- inline first line
+			virt_text_pos = "inline",
 			virt_lines = virt_lines,
-			virt_text_pos = "eol",
-			-- Add priority to ensure our ghost text appears above other extmarks
-			priority = 200,
+			priority = 4096,
 		})
-		if not success then
-			utils.notify("Failed to set multi-line ghost text extmark", vim.log.levels.ERROR)
+		if not ok then
+			utils.notify("Failed to set multi-line hybrid ghost", vim.log.levels.ERROR)
 			return
 		end
-		state.current_extmark = { ns_id = ns_id, id = multiline_extmark_id }
+		state.current_extmark = { ns_id = ns_id, id = id }
 	else
-		-- Single line completion with smart positioning
 		local display_text = text
-
-		-- Truncate very long single-line completions
 		if #display_text > 100 then
 			display_text = display_text:sub(1, 97) .. "..."
 		end
-
-		local success, singleline_extmark_id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
+		local ok, id = pcall(vim.api.nvim_buf_set_extmark, 0, ns_id, row, col, {
 			virt_text = { { display_text, "Comment" } },
 			virt_text_pos = "inline",
-			-- Add priority to ensure our ghost text appears above other extmarks
-			priority = 200,
+			priority = 4096,
 		})
-		if not success then
+		if not ok then
 			utils.notify("Failed to set ghost text extmark", vim.log.levels.ERROR)
 			return
 		end
-		state.current_extmark = { ns_id = ns_id, id = singleline_extmark_id }
+		state.current_extmark = { ns_id = ns_id, id = id }
 	end
 end
 
@@ -527,15 +515,18 @@ function M.accept_completion()
 			local cursor_row, cursor_col = cursor[1] - 1, cursor[2]
 
 			if #lines == 1 then
-				-- Ensure we insert AFTER the existing content, not overwriting final character
+				-- Use buf_set_text to insert at cursor without removing characters
 				local line_text = vim.api.nvim_get_current_line()
-				local insert_col = cursor_col
-				-- If cursor_col points to last character index (0-based) move insertion to end (length)
-				-- Example: line 'local x = 1' length 11; last char '1' at index 10; if cursor_col == 10 we want 11
-				if cursor_col == #line_text - 1 then
-					insert_col = #line_text
+				local line_len = #line_text
+				local col = cursor_col
+				-- Heuristic: if cursor is at index of last character (len-1) treat as end-of-line append
+				if col >= line_len then
+					col = line_len
+				elseif col == line_len - 1 then
+					-- Append after last character rather than before it
+					col = line_len
 				end
-				vim.api.nvim_buf_set_text(0, cursor_row, insert_col, cursor_row, insert_col, { lines[1] })
+				vim.api.nvim_buf_set_text(0, cursor_row, col, cursor_row, col, { lines[1] })
 			else
 				-- Multi-line insertion strategy:
 				-- 1. Merge first completion line into current line at cursor without deleting any existing trailing text.
