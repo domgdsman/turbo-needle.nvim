@@ -19,17 +19,17 @@ local function get_buf_state()
 	if not M._buf_states then
 		M._buf_states = {}
 	end
- 	if not M._buf_states[bufnr] then
- 		M._buf_states[bufnr] = {
- 			debounce_timer = nil,
- 			current_extmark = nil,
- 			active_request_id = nil, -- Track active API request ID
- 			active_job = nil, -- Track active plenary.job for cancellation
- 			request_counter = 0, -- Counter for generating unique request IDs
- 			cached_completion = nil, -- Cache original completion text
- 			cursor_position = nil, -- Store cursor position when setting ghost text
- 		}
- 	end
+	if not M._buf_states[bufnr] then
+		M._buf_states[bufnr] = {
+			debounce_timer = nil,
+			current_extmark = nil,
+			active_request_id = nil, -- Track active API request ID
+			active_job = nil, -- Track active plenary.job for cancellation
+			request_counter = 0, -- Counter for generating unique request IDs
+			cached_completion = nil, -- Cache original completion text
+			cursor_position = nil, -- Store cursor position when setting ghost text
+		}
+	end
 	return M._buf_states[bufnr]
 end
 
@@ -279,18 +279,22 @@ end
 -- Enable completions
 function M.enable()
 	enabled = true
-	utils.notify("turbo-needle completions enabled", vim.log.levels.INFO)
+	utils.notify("[turbo-needle] completions enabled", vim.log.levels.INFO)
 end
 
 -- Disable completions
 function M.disable()
 	enabled = false
-	utils.notify("turbo-needle completions disabled", vim.log.levels.INFO)
+	utils.notify("[turbo-needle] completions disabled", vim.log.levels.INFO)
 end
 
 -- Completion function: extract context and request completion
 function M.complete()
 	-- Only trigger completions in insert mode
+	-- Also respect global enabled toggle
+	if not M.enabled then
+		return
+	end
 	if vim.api.nvim_get_mode().mode ~= "i" then
 		return
 	end
@@ -501,9 +505,11 @@ function M.accept_completion()
 		local current_cursor = vim.api.nvim_win_get_cursor(0)
 		local current_row, current_col = current_cursor[1] - 1, current_cursor[2]
 
-		if not state.cursor_position or
-		   state.cursor_position.row ~= current_row or
-		   state.cursor_position.col ~= current_col then
+		if
+			not state.cursor_position
+			or state.cursor_position.row ~= current_row
+			or state.cursor_position.col ~= current_col
+		then
 			-- Cursor has moved, don't accept completion
 			return "\t"
 		end
@@ -521,8 +527,15 @@ function M.accept_completion()
 			local cursor_row, cursor_col = cursor[1] - 1, cursor[2]
 
 			if #lines == 1 then
-				-- Single line: insert at cursor position
-				vim.api.nvim_buf_set_text(0, cursor_row, cursor_col, cursor_row, cursor_col, { lines[1] })
+				-- Ensure we insert AFTER the existing content, not overwriting final character
+				local line_text = vim.api.nvim_get_current_line()
+				local insert_col = cursor_col
+				-- If cursor_col points to last character index (0-based) move insertion to end (length)
+				-- Example: line 'local x = 1' length 11; last char '1' at index 10; if cursor_col == 10 we want 11
+				if cursor_col == #line_text - 1 then
+					insert_col = #line_text
+				end
+				vim.api.nvim_buf_set_text(0, cursor_row, insert_col, cursor_row, insert_col, { lines[1] })
 			else
 				-- Multi-line: insert with proper line handling
 				local end_row = cursor_row + #lines - 1

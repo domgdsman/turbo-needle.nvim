@@ -30,6 +30,12 @@ describe("turbo-needle", function()
 		end)
 
 		it("should call context and api functions when filetype supported", function()
+			-- Mock vim mode to be insert mode
+			local original_get_mode = vim.api.nvim_get_mode
+			vim.api.nvim_get_mode = function()
+				return { mode = "i" }
+			end
+
 			-- Mock context
 			local context = require("turbo-needle.context")
 			local original_is_supported = context.is_filetype_supported
@@ -68,6 +74,7 @@ describe("turbo-needle", function()
 			vim.wait(100)
 
 			-- Restore mocks
+			vim.api.nvim_get_mode = original_get_mode
 			context.is_filetype_supported = original_is_supported
 			context.get_current_context = original_get_context
 			api.get_completion = original_get_completion
@@ -100,6 +107,12 @@ describe("turbo-needle", function()
 		end)
 
 		it("should handle api error", function()
+			-- Mock vim mode to be insert mode
+			local original_get_mode = vim.api.nvim_get_mode
+			vim.api.nvim_get_mode = function()
+				return { mode = "i" }
+			end
+
 			local context = require("turbo-needle.context")
 			local original_is_supported = context.is_filetype_supported
 			local original_get_context = context.get_current_context
@@ -130,6 +143,7 @@ describe("turbo-needle", function()
 			-- Wait for async callbacks to complete
 			vim.wait(100)
 
+			vim.api.nvim_get_mode = original_get_mode
 			context.is_filetype_supported = original_is_supported
 			context.get_current_context = original_get_context
 			api.get_completion = original_get_completion
@@ -139,6 +153,12 @@ describe("turbo-needle", function()
 		end)
 
 		it("should use custom parse_response when provided", function()
+			-- Mock vim mode to be insert mode
+			local original_get_mode = vim.api.nvim_get_mode
+			vim.api.nvim_get_mode = function()
+				return { mode = "i" }
+			end
+
 			-- Setup turbo-needle with custom parse_response
 			turbo_needle.setup({
 				api = {
@@ -182,6 +202,7 @@ describe("turbo-needle", function()
 			vim.wait(100)
 
 			-- Restore mocks
+			vim.api.nvim_get_mode = original_get_mode
 			context.is_filetype_supported = original_is_supported
 			context.get_current_context = original_get_context
 			api.get_completion = original_get_completion
@@ -213,33 +234,99 @@ describe("turbo-needle", function()
 			assert.is_function(turbo_needle.set_ghost_text)
 		end)
 
-		it("should clear ghost text without error", function()
+		it("should clear ghost text and reset state", function()
+			-- Prime state by setting ghost text (mock minimal api)
+			local original_get_mode = vim.api.nvim_get_mode
+			vim.api.nvim_get_mode = function()
+				return { mode = "i" }
+			end
+
+			-- Mock extmark creation so set_ghost_text succeeds
+			local original_create_ns = vim.api.nvim_create_namespace
+			local original_win_get_cursor = vim.api.nvim_win_get_cursor
+			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
+			vim.api.nvim_create_namespace = function()
+				return 99
+			end
+			vim.api.nvim_win_get_cursor = function()
+				return { 1, 0 }
+			end
+			local fake_extmark_id = 123
+			vim.api.nvim_buf_set_extmark = function()
+				return fake_extmark_id
+			end
+
+			-- Set ghost text then clear it
+			turbo_needle.set_ghost_text("abc")
+			local bufnr = vim.api.nvim_get_current_buf()
+			local state = turbo_needle._buf_states and turbo_needle._buf_states[bufnr]
+			assert.is_not_nil(state)
+			assert.is_table(state.current_extmark)
+			assert.is_not_nil(state.cached_completion)
+
+			-- Mock buf_del_extmark to ensure it is invoked
+			local original_buf_del_extmark = vim.api.nvim_buf_del_extmark
+			local del_called = false
+			vim.api.nvim_buf_del_extmark = function(_, ns, id)
+				if ns == state.current_extmark.ns_id and id == state.current_extmark.id then
+					del_called = true
+				end
+				return true
+			end
+
 			assert.has_no.errors(function()
 				turbo_needle.clear_ghost_text()
 			end)
+			assert.is_true(del_called)
+			assert.is_nil(state.current_extmark)
+			assert.is_nil(state.cached_completion)
+			assert.is_nil(state.cursor_position)
+
+			-- Restore
+			vim.api.nvim_get_mode = original_get_mode
+			vim.api.nvim_create_namespace = original_create_ns
+			vim.api.nvim_win_get_cursor = original_win_get_cursor
+			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
+			vim.api.nvim_buf_del_extmark = original_buf_del_extmark
 		end)
 
-		it("should set ghost text without error", function()
+		it("should set ghost text and update state", function()
+			-- Force insert mode
+			local original_get_mode = vim.api.nvim_get_mode
+			vim.api.nvim_get_mode = function()
+				return { mode = "i" }
+			end
 			-- Mock vim.api functions
 			local original_create_ns = vim.api.nvim_create_namespace
 			local original_win_get_cursor = vim.api.nvim_win_get_cursor
 			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
 
 			vim.api.nvim_create_namespace = function()
-				return 1
+				return 55
 			end
 			vim.api.nvim_win_get_cursor = function()
-				return { 1, 0 }
+				return { 1, 2 }
 			end
-			vim.api.nvim_buf_set_extmark = function()
-				return 1
+			local captured_opts
+			vim.api.nvim_buf_set_extmark = function(_, ns, row, col, opts)
+				captured_opts = { ns = ns, row = row, col = col, opts = opts }
+				return 999
 			end
 
 			assert.has_no.errors(function()
 				turbo_needle.set_ghost_text("test text")
 			end)
+			local bufnr = vim.api.nvim_get_current_buf()
+			local state = turbo_needle._buf_states[bufnr]
+			assert.is_not_nil(state.current_extmark)
+			assert.are.equal("test text", state.cached_completion)
+			assert.are.same({ row = 0, col = 2 }, state.cursor_position)
+			assert.is_table(captured_opts)
+			assert.are.equal(0, captured_opts.row) -- row stored at 0-based internally
+			assert.is_truthy(captured_opts.opts.virt_text)
 
 			-- Restore
+			vim.api.nvim_get_mode = original_get_mode
 			vim.api.nvim_create_namespace = original_create_ns
 			vim.api.nvim_win_get_cursor = original_win_get_cursor
 			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
@@ -278,37 +365,50 @@ describe("turbo-needle", function()
 			assert.are.equal("\t", result)
 		end)
 
-		it("should insert ghost text and return empty when ghost text present", function()
-			-- Mock set_ghost_text to set current_extmark
-			turbo_needle.set_ghost_text("test")
-
-			-- Mock vim.api functions
-			local original_get_extmark = vim.api.nvim_buf_get_extmark_by_id
-			local original_set_text = vim.api.nvim_buf_set_text
-			local original_clear = turbo_needle.clear_ghost_text
-
-			local set_text_called = false
-			local clear_called = false
-			vim.api.nvim_buf_get_extmark_by_id = function()
-				return { 0, 0, { virt_text = { { "inserted text", "Comment" } } } }
-			end
-			vim.api.nvim_buf_set_text = function(buf, start_row, start_col, end_row, end_col, text)
-				set_text_called = true
-				assert.are.equal("inserted text", text[1])
-			end
-			turbo_needle.clear_ghost_text = function()
-				clear_called = true
+		it("should insert ghost text and clear state when accepted", function()
+			-- Force insert mode
+			local original_get_mode = vim.api.nvim_get_mode
+			vim.api.nvim_get_mode = function()
+				return { mode = "i" }
 			end
 
-			local result = turbo_needle.accept_completion()
-			assert.are.equal("", result)
-			assert.is_true(set_text_called)
-			assert.is_true(clear_called)
+			-- Create a scratch buffer to observe inserted text
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_set_current_buf(bufnr)
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "local x = 1" })
+			-- Place cursor exactly at end of line: col is length of line
+			local line = "local x = 1"
+			vim.api.nvim_win_set_cursor(0, { 1, #line })
 
-			-- Restore
-			vim.api.nvim_buf_get_extmark_by_id = original_get_extmark
-			vim.api.nvim_buf_set_text = original_set_text
-			turbo_needle.clear_ghost_text = original_clear
+			-- Mock minimal APIs for ghost text
+			local original_create_ns = vim.api.nvim_create_namespace
+			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
+			vim.api.nvim_create_namespace = function()
+				return 42
+			end
+			vim.api.nvim_buf_set_extmark = function()
+				return 777
+			end
+
+			-- Set ghost text and accept
+			turbo_needle.set_ghost_text(" -- appended")
+			local state = turbo_needle._buf_states[bufnr]
+			assert.is_not_nil(state.cached_completion)
+			local ret = turbo_needle.accept_completion()
+			assert.are.equal("", ret, "Accepting a ghost completion should return empty string to suppress <Tab>")
+
+			-- Validate buffer content updated
+			local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+			assert.are.equal("local x = 1 -- appended", lines[1])
+			-- State cleared
+			assert.is_nil(state.cached_completion)
+			assert.is_nil(state.current_extmark)
+
+			-- Cleanup
+			vim.api.nvim_create_namespace = original_create_ns
+			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
+			vim.api.nvim_get_mode = original_get_mode
+			vim.api.nvim_buf_delete(bufnr, { force = true })
 		end)
 	end)
 end)
