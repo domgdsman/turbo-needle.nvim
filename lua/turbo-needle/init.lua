@@ -489,56 +489,67 @@ end
 function M.accept_completion()
 	local state = get_buf_state()
 	if state.cached_completion then
-		-- Validate cursor position hasn't changed
 		local current_cursor = vim.api.nvim_win_get_cursor(0)
 		local current_row, current_col = current_cursor[1] - 1, current_cursor[2]
 
-		if
-			not state.cursor_position
+		if not state.cursor_position
 			or state.cursor_position.row ~= current_row
 			or state.cursor_position.col ~= current_col
 		then
-			-- Cursor has moved, don't accept completion
 			return "\t"
 		end
 
-		-- Use cached completion text for reliable insertion
 		local text_to_insert = state.cached_completion
-
-		-- Split into lines for proper insertion
 		local lines = vim.split(text_to_insert, "\n", { plain = true })
 
-		-- Use safer text insertion method with error handling
-		local insert_success = pcall(function()
-			-- Use current cursor position for insertion (where user wants the text)
+		-- Instrumentation locals
+		local dbg_context = {}
+
+		local insert_ok, insert_err = pcall(function()
 			local cursor = vim.api.nvim_win_get_cursor(0)
 			local cursor_row, cursor_col = cursor[1] - 1, cursor[2]
+			dbg_context.cursor_row = cursor_row
+			dbg_context.cursor_col = cursor_col
 
 			if #lines == 1 then
-				-- Use buf_set_text to insert at cursor without removing characters
 				local line_text = vim.api.nvim_get_current_line()
 				local line_len = #line_text
+				dbg_context.line_len = line_len
+				dbg_context.line_text = line_text
+				dbg_context.insert_fragment = lines[1]
+
 				local col = cursor_col
-				-- Heuristic: if cursor is at index of last character (len-1) treat as end-of-line append
 				if col >= line_len then
 					col = line_len
 				elseif col == line_len - 1 then
-					-- Append after last character rather than before it
 					col = line_len
 				end
+				dbg_context.final_col = col
+
+				-- Direct check before inserting
+				if col < 0 or col > line_len then
+					error(string.format("col_out_of_range col=%d line_len=%d", col, line_len))
+				end
+
 				vim.api.nvim_buf_set_text(0, cursor_row, col, cursor_row, col, { lines[1] })
 			else
-				-- Multi-line insertion strategy:
-				-- 1. Merge first completion line into current line at cursor without deleting any existing trailing text.
-				-- 2. Insert remaining completion lines as new lines directly below the current line.
+				-- Multi-line path
+				local line_text = vim.api.nvim_get_current_line()
+				dbg_context.line_text = line_text
+				dbg_context.line_len = #line_text
+				dbg_context.insert_first = lines[1]
+				dbg_context.tail_count = #lines - 1
 
-				local current_line = vim.api.nvim_get_current_line()
-				local before = current_line:sub(1, cursor_col)
-				local after = current_line:sub(cursor_col + 1)
+				local cursor = vim.api.nvim_win_get_cursor(0)
+				local cursor_row, cursor_col = cursor[1] - 1, cursor[2]
+				local before = line_text:sub(1, cursor_col)
+				local after = line_text:sub(cursor_col + 1)
+				dbg_context.before = before
+				dbg_context.after = after
+
 				local merged_first = before .. lines[1] .. after
-				-- Replace current line with merged result
 				vim.api.nvim_buf_set_lines(0, cursor_row, cursor_row + 1, false, { merged_first })
-				-- Insert remaining lines if any
+
 				if #lines > 1 then
 					local tail = {}
 					for i = 2, #lines do
@@ -549,14 +560,22 @@ function M.accept_completion()
 			end
 		end)
 
-		if insert_success then
+		if insert_ok then
 			M.clear_ghost_text()
-			return "" -- Don't insert tab
+			return ""
 		else
-			utils.notify("Failed to insert completion text", vim.log.levels.WARN)
+			-- Expose detailed diagnostics once
+			utils.notify(
+				string.format(
+					"Insertion error: %s | ctx=%s",
+					tostring(insert_err),
+					vim.inspect(dbg_context)
+				),
+				vim.log.levels.ERROR
+			)
+			return "\t"
 		end
 	end
-	-- No cached completion, insert tab
 	return "\t"
 end
 
