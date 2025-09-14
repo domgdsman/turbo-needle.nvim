@@ -3,6 +3,10 @@ local utils = require("turbo-needle.utils")
 
 local M = {}
 
+local TurboNeedle = {
+	augroup = "turbo-needle",
+}
+
 -- Module-scoped enabled state (private)
 local enabled = true
 
@@ -184,8 +188,11 @@ function M.setup_completion_trigger()
 		)
 	end
 
+	vim.api.nvim_create_augroup(TurboNeedle.augroup, { clear = true })
+
 	-- Clear timer, cancel requests, and ghost text on buffer leave
 	vim.api.nvim_create_autocmd("BufLeave", {
+		group = TurboNeedle.augroup,
 		callback = function()
 			local state = get_buf_state()
 			if state.debounce_timer then
@@ -216,6 +223,7 @@ function M.setup_completion_trigger()
 
 	-- Clean up buffer state when buffer is deleted
 	vim.api.nvim_create_autocmd("BufDelete", {
+		group = TurboNeedle.augroup,
 		callback = function(args)
 			local bufnr = args.buf
 			if M._buf_states and M._buf_states[bufnr] then
@@ -243,6 +251,7 @@ function M.setup_completion_trigger()
 
 	-- Clean up old buffer states periodically to prevent memory leak
 	vim.api.nvim_create_autocmd("BufEnter", {
+		group = TurboNeedle.augroup,
 		callback = vim.schedule_wrap(function()
 			if M._buf_states then
 				-- Get list of valid buffers
@@ -272,6 +281,7 @@ function M.setup_completion_trigger()
 
 	-- Trigger on insert leave and cursor moved in insert
 	vim.api.nvim_create_autocmd({ "InsertLeave", "CursorMovedI" }, {
+		group = TurboNeedle.augroup,
 		callback = trigger_completion,
 	})
 end
@@ -492,7 +502,8 @@ function M.accept_completion()
 		local current_cursor = vim.api.nvim_win_get_cursor(0)
 		local current_row, current_col = current_cursor[1] - 1, current_cursor[2]
 
-		if not state.cursor_position
+		if
+			not state.cursor_position
 			or state.cursor_position.row ~= current_row
 			or state.cursor_position.col ~= current_col
 		then
@@ -579,21 +590,30 @@ function M.accept_completion()
 			-- Handle textlock (E565) by scheduling the insertion
 			if err_msg:match("E565") then
 				local cached = state.cached_completion
-				local stored_pos = state.cursor_position and { row = state.cursor_position.row, col = state.cursor_position.col }
+				local stored_pos = state.cursor_position
+					and { row = state.cursor_position.row, col = state.cursor_position.col }
 				local lines_copy = vim.split(cached or "", "\n", { plain = true })
 				vim.schedule(function()
 					-- Revalidate state & cursor
-					if not cached or not stored_pos then return end
+					if not cached or not stored_pos then
+						return
+					end
 					local cur = vim.api.nvim_win_get_cursor(0)
 					local row = cur[1] - 1
 					local col = cur[2]
-					if row ~= stored_pos.row then return end
+					if row ~= stored_pos.row then
+						return
+					end
 					local sched_final
 					if #lines_copy == 1 then
 						local line_text = vim.api.nvim_get_current_line()
 						local line_len = #line_text
-						if col > line_len then col = line_len end
-						if col == line_len - 1 then col = line_len end
+						if col > line_len then
+							col = line_len
+						end
+						if col == line_len - 1 then
+							col = line_len
+						end
 						if pcall(vim.api.nvim_buf_set_text, 0, row, col, row, col, { lines_copy[1] }) then
 							sched_final = { row = row, col = col + #lines_copy[1] }
 						end
@@ -605,7 +625,9 @@ function M.accept_completion()
 						local ok1 = pcall(vim.api.nvim_buf_set_lines, 0, row, row + 1, false, { merged_first })
 						if ok1 and #lines_copy > 1 then
 							local tail = {}
-							for i = 2, #lines_copy do tail[#tail + 1] = lines_copy[i] end
+							for i = 2, #lines_copy do
+								tail[#tail + 1] = lines_copy[i]
+							end
 							if pcall(vim.api.nvim_buf_set_lines, 0, row + 1, row + 1, false, tail) then
 								sched_final = { row = row + (#lines_copy - 1), col = #lines_copy[#lines_copy] }
 							end
@@ -621,11 +643,7 @@ function M.accept_completion()
 			end
 
 			utils.notify(
-				string.format(
-					"Insertion error: %s | ctx=%s",
-					err_msg,
-					vim.inspect(dbg_context)
-				),
+				string.format("Insertion error: %s | ctx=%s", err_msg, vim.inspect(dbg_context)),
 				vim.log.levels.ERROR
 			)
 			return "\t"
