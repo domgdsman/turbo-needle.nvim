@@ -96,21 +96,31 @@ describe("turbo-needle.utils", function()
 			-- Test with context where completion duplicates last line of prefix
 			local context = {
 				prefix = "function test() {\n    console.log('hello')",
-				suffix = "\n}"
+				suffix = "\n}",
 			}
-			test_completion_validation("console.log('hello')\n    return true", context, false, "Duplicate line completion")
+			test_completion_validation(
+				"console.log('hello')\n    return true",
+				context,
+				false,
+				"Duplicate line completion"
+			)
 
 			-- Test with multi-line context - should detect duplicate
 			local multiline_context = {
 				prefix = "function foo() {\n    var x = 1;\n    var y = 2",
-				suffix = "\n    return x + y;\n}"
+				suffix = "\n    return x + y;\n}",
 			}
-			test_completion_validation("var y = 2\n    var z = 3", multiline_context, false, "Duplicate line completion")
+			test_completion_validation(
+				"var y = 2\n    var z = 3",
+				multiline_context,
+				false,
+				"Duplicate line completion"
+			)
 
 			-- Test with no duplicate - should pass
 			local no_duplicate_context = {
 				prefix = "function foo() {\n    var x = 1",
-				suffix = "\n}"
+				suffix = "\n}",
 			}
 			test_completion_validation("var y = 2", no_duplicate_context, true)
 		end)

@@ -4,12 +4,20 @@ local turbo_needle = require("turbo-needle")
 local stub = require("luassert.stub")
 local spy = require("luassert.spy")
 
-	describe("turbo-needle", function()
-		before_each(function()
-			-- Reset the module to use default config
-			package.loaded["turbo-needle"] = nil
-			turbo_needle = require("turbo-needle")
-		end)
+describe("turbo-needle", function()
+	before_each(function()
+		-- Reset the module to use default config
+		package.loaded["turbo-needle"] = nil
+		turbo_needle = require("turbo-needle")
+	end)
+
+	after_each(function()
+		-- Clean up module state to prevent interference between tests
+		package.loaded["turbo-needle"] = nil
+		package.loaded["turbo-needle.context"] = nil
+		package.loaded["turbo-needle.api"] = nil
+		package.loaded["turbo-needle.utils"] = nil
+	end)
 
 	describe("setup", function()
 		it("should setup with default configuration", function()
@@ -35,41 +43,30 @@ local spy = require("luassert.spy")
 
 		it("should call context and api functions when filetype supported", function()
 			-- Mock vim mode to be insert mode
-			local original_get_mode = vim.api.nvim_get_mode
-			vim.api.nvim_get_mode = function()
-				return { mode = "i" }
-			end
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
 
 			-- Mock context
 			local context = require("turbo-needle.context")
-			local original_is_supported = context.is_filetype_supported
-			local original_get_context = context.get_current_context
-			context.is_filetype_supported = function()
-				return true
-			end
-			context.get_current_context = function()
-				return { prefix = "test prefix", suffix = "test suffix" }
-			end
+			stub(context, "is_filetype_supported").returns(true)
+			stub(context, "get_current_context").returns({ prefix = "test prefix", suffix = "test suffix" })
 
 			-- Mock api
 			local api = require("turbo-needle.api")
-			local original_get_completion = api.get_completion
 			local get_completion_called = false
-			api.get_completion = function(data, callback)
+			stub(api, "get_completion").invokes(function(data, callback)
 				get_completion_called = true
 				assert.are.equal("test prefix", data.prefix)
 				assert.are.equal("test suffix", data.suffix)
 				-- Simulate success
 				callback(nil, { choices = { { text = "completed code" } } })
-			end
+			end)
 
 			-- Mock set_ghost_text
-			local original_set_ghost = turbo_needle.set_ghost_text
 			local set_ghost_called = false
-			turbo_needle.set_ghost_text = function(text)
+			stub(turbo_needle, "set_ghost_text").invokes(function(text)
 				set_ghost_called = true
 				assert.are.equal("completed code", text)
-			end
+			end)
 
 			-- Call complete
 			turbo_needle.complete()
@@ -77,91 +74,57 @@ local spy = require("luassert.spy")
 			-- Wait for async callbacks to complete
 			vim.wait(100)
 
-			-- Restore mocks
-			vim.api.nvim_get_mode = original_get_mode
-			context.is_filetype_supported = original_is_supported
-			context.get_current_context = original_get_context
-			api.get_completion = original_get_completion
-			turbo_needle.set_ghost_text = original_set_ghost
-
 			assert.is_true(get_completion_called)
 			assert.is_true(set_ghost_called)
 		end)
 
 		it("should not call api when filetype not supported", function()
 			local context = require("turbo-needle.context")
-			local original_is_supported = context.is_filetype_supported
-			context.is_filetype_supported = function()
-				return false
-			end
+			stub(context, "is_filetype_supported").returns(false)
 
 			local api = require("turbo-needle.api")
-			local original_get_completion = api.get_completion
 			local get_completion_called = false
-			api.get_completion = function()
+			stub(api, "get_completion").invokes(function()
 				get_completion_called = true
-			end
+			end)
 
 			turbo_needle.complete()
-
-			context.is_filetype_supported = original_is_supported
-			api.get_completion = original_get_completion
 
 			assert.is_false(get_completion_called)
 		end)
 
 		it("should handle api error", function()
 			-- Mock vim mode to be insert mode
-			local original_get_mode = vim.api.nvim_get_mode
-			vim.api.nvim_get_mode = function()
-				return { mode = "i" }
-			end
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
 
 			local context = require("turbo-needle.context")
-			local original_is_supported = context.is_filetype_supported
-			local original_get_context = context.get_current_context
-			context.is_filetype_supported = function()
-				return true
-			end
-			context.get_current_context = function()
-				return { prefix = "", suffix = "" }
-			end
+			stub(context, "is_filetype_supported").returns(true)
+			stub(context, "get_current_context").returns({ prefix = "", suffix = "" })
 
 			local api = require("turbo-needle.api")
-			local original_get_completion = api.get_completion
-			api.get_completion = function(data, callback)
+			stub(api, "get_completion").invokes(function(data, callback)
 				callback("API error", nil)
-			end
+			end)
 
 			local utils = require("turbo-needle.utils")
-			local original_notify = utils.notify
 			local notify_called = false
-			utils.notify = function(msg, level)
+			stub(utils, "notify").invokes(function(msg, level)
 				notify_called = true
 				assert.is_not_nil(string.find(msg, "API error"))
 				assert.are.equal(level, vim.log.levels.ERROR)
-			end
+			end)
 
 			turbo_needle.complete()
 
 			-- Wait for async callbacks to complete
 			vim.wait(100)
 
-			vim.api.nvim_get_mode = original_get_mode
-			context.is_filetype_supported = original_is_supported
-			context.get_current_context = original_get_context
-			api.get_completion = original_get_completion
-			utils.notify = original_notify
-
 			assert.is_true(notify_called)
 		end)
 
 		it("should use custom parse_response when provided", function()
 			-- Mock vim mode to be insert mode
-			local original_get_mode = vim.api.nvim_get_mode
-			vim.api.nvim_get_mode = function()
-				return { mode = "i" }
-			end
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
 
 			-- Setup turbo-needle with custom parse_response
 			turbo_needle.setup({
@@ -173,44 +136,29 @@ local spy = require("luassert.spy")
 			})
 
 			local context = require("turbo-needle.context")
-			local original_is_supported = context.is_filetype_supported
-			local original_get_context = context.get_current_context
-			context.is_filetype_supported = function()
-				return true
-			end
-			context.get_current_context = function()
-				return { prefix = "", suffix = "" }
-			end
+			stub(context, "is_filetype_supported").returns(true)
+			stub(context, "get_current_context").returns({ prefix = "", suffix = "" })
 
 			local api = require("turbo-needle.api")
-			local original_get_completion = api.get_completion
 			local get_completion_called = false
-			api.get_completion = function(data, callback)
+			stub(api, "get_completion").invokes(function(data, callback)
 				get_completion_called = true
 				-- Simulate success with custom format
 				callback(nil, { custom_field = "custom parsed completion" })
-			end
+			end)
 
 			-- Mock set_ghost_text
-			local original_set_ghost = turbo_needle.set_ghost_text
 			local set_ghost_called = false
-			turbo_needle.set_ghost_text = function(text)
+			stub(turbo_needle, "set_ghost_text").invokes(function(text)
 				set_ghost_called = true
 				assert.are.equal("custom parsed completion", text)
-			end
+			end)
 
 			-- Call complete
 			turbo_needle.complete()
 
 			-- Wait for async callbacks to complete
 			vim.wait(100)
-
-			-- Restore mocks
-			vim.api.nvim_get_mode = original_get_mode
-			context.is_filetype_supported = original_is_supported
-			context.get_current_context = original_get_context
-			api.get_completion = original_get_completion
-			turbo_needle.set_ghost_text = original_set_ghost
 
 			assert.is_true(get_completion_called)
 			assert.is_true(set_ghost_called)

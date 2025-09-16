@@ -111,10 +111,10 @@ async.tests.describe("turbo-needle expr mapping acceptance", function()
 		async.void(function()
 			turbo_needle.setup()
 
-		-- Setup: Create buffer and mocks
-		local bufnr = setup_test_buffer()
-		setup_minimal_mocks(bufnr)
-		local set_ghost_spy = setup_ghost_text_spy(bufnr)
+			-- Setup: Create buffer and mocks
+			local bufnr = setup_test_buffer()
+			setup_minimal_mocks(bufnr)
+			local set_ghost_spy = setup_ghost_text_spy(bufnr)
 
 			-- Setup: Provide ghost text
 			turbo_needle.set_ghost_text(" -- appended_expr")
