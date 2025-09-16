@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-field
+
 local api = require("turbo-needle.api")
 
 describe("turbo-needle.api", function()

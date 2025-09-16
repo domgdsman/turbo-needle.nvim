@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-field
+
 local turbo_needle = require("turbo-needle")
 
 describe("turbo-needle", function()
@@ -417,17 +419,23 @@ describe("turbo-needle", function()
 
 		it("should position cursor at end after multi-line insertion", function()
 			local original_get_mode = vim.api.nvim_get_mode
-			vim.api.nvim_get_mode = function() return { mode = "i" } end
+			vim.api.nvim_get_mode = function()
+				return { mode = "i" }
+			end
 
 			local bufnr = vim.api.nvim_create_buf(false, true)
 			vim.api.nvim_set_current_buf(bufnr)
 			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "function test()" })
-			vim.api.nvim_win_set_cursor(0, {1, #"function test()"})
+			vim.api.nvim_win_set_cursor(0, { 1, #"function test()" })
 
 			local original_create_ns = vim.api.nvim_create_namespace
 			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
-			vim.api.nvim_create_namespace = function() return 101 end
-			vim.api.nvim_buf_set_extmark = function() return 202 end
+			vim.api.nvim_create_namespace = function()
+				return 101
+			end
+			vim.api.nvim_buf_set_extmark = function()
+				return 202
+			end
 
 			local completion = "\n  local x = 1\n  return x"
 			-- Provide a multi-line ghost text starting with a newline to mimic FIM middle insert tail

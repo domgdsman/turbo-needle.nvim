@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-field
+
 local turbo_needle = require("turbo-needle")
 
 -- Integration-style test for end-to-end ghost text display and acceptance
@@ -152,17 +154,22 @@ describe("turbo-needle ghost integration", function()
 		vim.api.nvim_win_set_cursor(0, { target_line, insertion_col_0based })
 
 		-- Multi-line completion (first line continues current, next lines extend logic)
-		local mocked_completion = " + v -- accumulate" ..
-			"\n    if v > 100 then" ..
-			"\n      total = total + 1 -- bonus" ..
-			"\n    end"
+		local mocked_completion = " + v -- accumulate"
+			.. "\n    if v > 100 then"
+			.. "\n      total = total + 1 -- bonus"
+			.. "\n    end"
 
 		-- Mock context (simplified) to allow completion request
 		local context = require("turbo-needle.context")
 		local original_get_ctx = context.get_current_context
 		context.get_current_context = function()
-			local prefix = table.concat({ original_lines[1], original_lines[2], original_lines[3], line_text:sub(1, insertion_col_0based) }, "\n")
-			local suffix = line_text:sub(insertion_col_0based + 1) .. "\n" .. table.concat({ original_lines[5], original_lines[6], original_lines[7] }, "\n")
+			local prefix = table.concat(
+				{ original_lines[1], original_lines[2], original_lines[3], line_text:sub(1, insertion_col_0based) },
+				"\n"
+			)
+			local suffix = line_text:sub(insertion_col_0based + 1)
+				.. "\n"
+				.. table.concat({ original_lines[5], original_lines[6], original_lines[7] }, "\n")
 			return { prefix = prefix, suffix = suffix }
 		end
 		local original_is_supported = context.is_filetype_supported
@@ -227,7 +234,11 @@ describe("turbo-needle ghost integration", function()
 		assert.are.equal(#expected_tail, #ghost.opts.virt_lines, "virt_lines length mismatch (tail lines)")
 		-- Optionally verify each tail line text (keeps test precise but resilient to highlight group consistency)
 		for i, seg in ipairs(expected_tail) do
-			assert.are.equal(seg[1][1], ghost.opts.virt_lines[i][1][1], string.format("virt_lines tail line %d mismatch", i))
+			assert.are.equal(
+				seg[1][1],
+				ghost.opts.virt_lines[i][1][1],
+				string.format("virt_lines tail line %d mismatch", i)
+			)
 		end
 
 		-- Accept multi-line completion

@@ -2,8 +2,8 @@ local M = {}
 
 M.defaults = {
 	api = {
-		base_url = "http://localhost:8000",
-		model = "codellama:7b-code",
+		base_url = "http://localhost:8080",
+		model = "qwen3-coder:30b-a3b-instruct-gguf",
 		api_key_name = nil, -- Environment variable name for API key (optional)
 		max_tokens = 256, -- Maximum tokens to generate
 		temperature = nil, -- Optional: Sampling temperature (0.0 to 2.0)

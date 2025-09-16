@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-field
+
 local utils = require("turbo-needle.utils")
 
 describe("turbo-needle.utils", function()

@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-field, need-check-nil
+
 local context = require("turbo-needle.context")
 
 describe("turbo-needle.context", function()

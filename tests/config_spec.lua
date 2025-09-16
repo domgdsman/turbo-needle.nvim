@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-field
+
 local config = require("turbo-needle.config")
 
 describe("turbo-needle.config", function()
