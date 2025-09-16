@@ -1,6 +1,9 @@
 ---@diagnostic disable: undefined-field
 
 local api = require("turbo-needle.api")
+local mock = require('luassert.mock')
+local stub = require('luassert.stub')
+local spy = require('luassert.spy')
 
 describe("turbo-needle.api", function()
 	describe("build_curl_args", function()
@@ -33,13 +36,8 @@ describe("turbo-needle.api", function()
 
 		it("should handle environment variable API key", function()
 			-- Mock os.getenv for testing
-			local original_getenv = os.getenv
-			os.getenv = function(key)
-				if key == "TEST_API_KEY" then
-					return "env-key"
-				end
-				return original_getenv(key)
-			end
+			stub(os, "getenv")
+			os.getenv.returns("env-key")
 
 			local provider_opts = {
 				base_url = "http://localhost:8000",
@@ -58,8 +56,8 @@ describe("turbo-needle.api", function()
 			assert.are.equal("http://localhost:8000/v1/completions", result.url)
 			assert.is_not_nil(result.body.prompt)
 
-			-- Restore original getenv
-			os.getenv = original_getenv
+			-- Verify the function was called with the expected argument
+			assert.stub(os.getenv).was_called_with("TEST_API_KEY")
 		end)
 
 		it("should include max_tokens and temperature when set", function()
@@ -148,15 +146,10 @@ describe("turbo-needle.api", function()
 
 		it("should warn when api_key_name is set but env var is missing", function()
 			local turbo_needle = require("turbo-needle")
-			local original_getenv = os.getenv
 
 			-- Mock missing environment variable
-			os.getenv = function(key)
-				if key == "MISSING_API_KEY" then
-					return nil
-				end
-				return original_getenv(key)
-			end
+			stub(os, "getenv")
+			os.getenv.returns(nil)
 
 			-- Setup turbo-needle with custom config
 			turbo_needle.setup({
@@ -165,15 +158,15 @@ describe("turbo-needle.api", function()
 
 			-- Mock utils.notify to capture the warning
 			local utils = require("turbo-needle.utils")
-			local original_notify = utils.notify
+			stub(utils, "notify")
 			local notify_called = false
 			local notify_message = ""
 			local notify_level = nil
-			utils.notify = function(msg, level)
+			utils.notify.invokes(function(msg, level)
 				notify_called = true
 				notify_message = msg
 				notify_level = level
-			end
+			end)
 
 			api.validate_api_key_config()
 
@@ -181,9 +174,9 @@ describe("turbo-needle.api", function()
 			assert.is_not_nil(string.find(notify_message, "MISSING_API_KEY"))
 			assert.are.equal(notify_level, vim.log.levels.WARN)
 
-			-- Restore
-			os.getenv = original_getenv
-			utils.notify = original_notify
+			-- Verify functions were called with expected arguments
+			assert.stub(os.getenv).was_called_with("MISSING_API_KEY")
+			assert.stub(utils.notify).was_called()
 		end)
 	end)
 
