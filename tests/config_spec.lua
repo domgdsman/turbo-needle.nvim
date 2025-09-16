@@ -14,8 +14,8 @@ describe("turbo-needle.config", function()
 
 		it("should have default API settings", function()
 			local api = config.defaults.api
-			assert.are.equal("http://localhost:8000", api.base_url)
-			assert.are.equal("codellama:7b-code", api.model)
+			assert.are.equal("http://localhost:8080", api.base_url)
+			assert.are.equal("qwen3-coder", api.model)
 			assert.is_nil(api.api_key_name) -- Optional field, defaults to nil
 			assert.are.equal(256, api.max_tokens) -- Default value
 			assert.is_nil(api.temperature) -- Optional field, defaults to nil
