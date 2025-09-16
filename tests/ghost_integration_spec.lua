@@ -1,9 +1,9 @@
 ---@diagnostic disable: undefined-field
 
 local turbo_needle = require("turbo-needle")
+local async = require("plenary.async")
 local stub = require("luassert.stub")
 local spy = require("luassert.spy")
-local async = require("plenary.async")
 
 -- Integration-style test for end-to-end ghost text display and acceptance
 -- Verifies:
@@ -23,17 +23,14 @@ end
 -- Helper: Setup common mocks for integration tests
 local function setup_integration_mocks()
 	-- Mock vim mode
-	stub(vim.api, "nvim_get_mode")
-	vim.api.nvim_get_mode.returns({ mode = "i" })
+	stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
 
 	-- Mock namespace creation
-	stub(vim.api, "nvim_create_namespace")
-	vim.api.nvim_create_namespace.returns(444)
+	stub(vim.api, "nvim_create_namespace").returns(444)
 
 	-- Mock extmark operations
 	local extmark_calls = {}
-	stub(vim.api, "nvim_buf_set_extmark")
-	vim.api.nvim_buf_set_extmark.invokes(function(buf, ns, row, col, opts)
+	stub(vim.api, "nvim_buf_set_extmark").invokes(function(buf, ns, row, col, opts)
 		table.insert(extmark_calls, { buf = buf, ns = ns, row = row, col = col, opts = opts })
 		return 2024
 	end)
@@ -48,29 +45,36 @@ end
 
 -- Helper: Setup context mocks
 local function setup_context_mocks(context_module, prefix, suffix)
-	stub(context_module, "get_current_context")
-	context_module.get_current_context.returns({ prefix = prefix, suffix = suffix })
+	stub(context_module, "get_current_context").returns({ prefix = prefix, suffix = suffix })
 
-	stub(context_module, "is_filetype_supported")
-	context_module.is_filetype_supported.returns(true)
+	stub(context_module, "is_filetype_supported").returns(true)
 end
 
 -- Helper: Setup API mocks
 local function setup_api_mocks(api_module, completion_text)
-	local api_spy = spy.on(api_module, "get_completion")
-
-	stub(api_module, "get_completion")
-	api_module.get_completion.invokes(function(_, callback)
+	local api_stub = stub(api_module, "get_completion")
+	api_stub.invokes(function(_, callback)
 		callback(nil, { choices = { { text = completion_text } } })
 	end)
-
-	return api_spy
+	return api_stub
 end
 
 async.tests.describe("turbo-needle ghost integration", function()
 	async.tests.before_each(function()
 		package.loaded["turbo-needle"] = nil
 		turbo_needle = require("turbo-needle")
+		_G.__snapshot = assert:snapshot()
+	end)
+
+	async.tests.after_each(function()
+		if _G.__snapshot then
+			_G.__snapshot:revert()
+		end
+		package.loaded["turbo-needle"] = nil
+		package.loaded["turbo-needle.context"] = nil
+		package.loaded["turbo-needle.api"] = nil
+		package.loaded["turbo-needle.utils"] = nil
+		package.loaded["turbo-needle.config"] = nil
 	end)
 
 	async.tests.it(
@@ -92,8 +96,7 @@ async.tests.describe("turbo-needle ghost integration", function()
 			local api_spy = setup_api_mocks(api, mocked_completion)
 
 			-- Mock cursor position for extmark
-			stub(vim.api, "nvim_win_get_cursor")
-			vim.api.nvim_win_get_cursor.returns({ 2, 12 })
+			stub(vim.api, "nvim_win_get_cursor").returns({ 2, 12 })
 
 			-- Trigger completion with async handling
 			local async_complete = async.wrap(turbo_needle.complete, 1)
@@ -101,7 +104,7 @@ async.tests.describe("turbo-needle ghost integration", function()
 			async.util.sleep(10) -- Allow async operations to complete
 
 			-- Assertions for ghost text display
-			assert.spy(api_spy).was_called(1)
+			assert.stub(api_spy).was_called(1)
 			assert.is_true(#mock_state.extmark_calls >= 1, "Ghost text extmark should be set")
 
 			local ghost = mock_state.get_last_extmark()
@@ -175,8 +178,7 @@ async.tests.describe("turbo-needle ghost integration", function()
 			local api_spy = setup_api_mocks(api, mocked_completion)
 
 			-- Mock cursor position for extmark
-			stub(vim.api, "nvim_win_get_cursor")
-			vim.api.nvim_win_get_cursor.returns({ 4, 13 })
+			stub(vim.api, "nvim_win_get_cursor").returns({ 4, 13 })
 
 			-- Trigger completion with async handling
 			local async_complete = async.wrap(turbo_needle.complete, 1)
@@ -184,7 +186,7 @@ async.tests.describe("turbo-needle ghost integration", function()
 			async.util.sleep(10)
 
 			-- Assertions for multi-line ghost text display
-			assert.spy(api_spy).was_called(1)
+			assert.stub(api_spy).was_called(1)
 			assert.is_true(#mock_state.extmark_calls > 0, "Ghost extmark expected")
 
 			local ghost = mock_state.get_last_extmark()

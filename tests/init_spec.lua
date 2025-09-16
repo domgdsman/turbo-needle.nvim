@@ -5,18 +5,24 @@ local stub = require("luassert.stub")
 local spy = require("luassert.spy")
 
 describe("turbo-needle", function()
+	local snapshot
 	before_each(function()
-		-- Reset the module to use default config
+		-- Reset stubs/spies and module to use default config
+		snapshot = assert:snapshot()
 		package.loaded["turbo-needle"] = nil
 		turbo_needle = require("turbo-needle")
 	end)
 
 	after_each(function()
-		-- Clean up module state to prevent interference between tests
+		-- Revert stubs/spies and clean module caches
+		if snapshot then
+			snapshot:revert()
+		end
 		package.loaded["turbo-needle"] = nil
 		package.loaded["turbo-needle.context"] = nil
 		package.loaded["turbo-needle.api"] = nil
 		package.loaded["turbo-needle.utils"] = nil
+		package.loaded["turbo-needle.config"] = nil
 	end)
 
 	describe("setup", function()
@@ -77,16 +83,14 @@ describe("turbo-needle", function()
 			-- Call complete
 			turbo_needle.complete()
 
-
-			-- Restore schedule stub
-			schedule_stub:revert()
-
 			assert.is_true(get_completion_called)
 			assert.is_true(set_ghost_called)
 		end)
 
 		it("should not call api when filetype not supported", function()
 			local context = require("turbo-needle.context")
+			-- Ensure we're in insert mode so gating happens on filetype
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
 			stub(context, "is_filetype_supported").returns(false)
 
 			local api = require("turbo-needle.api")
@@ -128,9 +132,6 @@ describe("turbo-needle", function()
 			end)
 
 			turbo_needle.complete()
-
-			-- Restore schedule stub
-			schedule_stub:revert()
 
 			assert.is_true(notify_called)
 		end)
@@ -175,10 +176,6 @@ describe("turbo-needle", function()
 
 			-- Call complete
 			turbo_needle.complete()
-
-
-			-- Restore schedule stub
-			schedule_stub:revert()
 
 			assert.is_true(get_completion_called)
 			assert.is_true(set_ghost_called)
@@ -265,16 +262,15 @@ describe("turbo-needle", function()
 		it("should not set ghost text for empty text", function()
 			-- Setup mocks
 			stub(vim.api, "nvim_create_namespace").returns(1)
-			local set_extmark_spy = spy.on(vim.api, "nvim_buf_set_extmark")
-			stub(vim.api, "nvim_buf_set_extmark")
+			local set_extmark_stub = stub(vim.api, "nvim_buf_set_extmark")
 
 			-- Test empty string
 			turbo_needle.set_ghost_text("")
-			assert.spy(set_extmark_spy).was_called(0)
+			assert.stub(set_extmark_stub).was_not_called()
 
 			-- Test nil
 			turbo_needle.set_ghost_text(nil)
-			assert.spy(set_extmark_spy).was_called(0)
+			assert.stub(set_extmark_stub).was_not_called()
 		end)
 	end)
 
@@ -315,9 +311,6 @@ describe("turbo-needle", function()
 			-- State cleared
 			assert.is_nil(state.cached_completion)
 			assert.is_nil(state.current_extmark)
-
-			-- Restore original vim.schedule
-			schedule_stub:revert()
 		end)
 
 		it("should position cursor at end after multi-line insertion", function()
@@ -349,9 +342,6 @@ describe("turbo-needle", function()
 			-- State cleared
 			assert.is_nil(state.cached_completion)
 			assert.is_nil(state.current_extmark)
-
-			-- Restore original vim.schedule
-			schedule_stub:revert()
 		end)
 	end)
 end)
