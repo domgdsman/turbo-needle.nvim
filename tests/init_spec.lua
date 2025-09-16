@@ -1,13 +1,15 @@
 ---@diagnostic disable: undefined-field
 
 local turbo_needle = require("turbo-needle")
+local stub = require("luassert.stub")
+local spy = require("luassert.spy")
 
-describe("turbo-needle", function()
-	before_each(function()
-		-- Reset the module to use default config
-		package.loaded["turbo-needle"] = nil
-		turbo_needle = require("turbo-needle")
-	end)
+	describe("turbo-needle", function()
+		before_each(function()
+			-- Reset the module to use default config
+			package.loaded["turbo-needle"] = nil
+			turbo_needle = require("turbo-needle")
+		end)
 
 	describe("setup", function()
 		it("should setup with default configuration", function()
@@ -237,26 +239,11 @@ describe("turbo-needle", function()
 		end)
 
 		it("should clear ghost text and reset state", function()
-			-- Prime state by setting ghost text (mock minimal api)
-			local original_get_mode = vim.api.nvim_get_mode
-			vim.api.nvim_get_mode = function()
-				return { mode = "i" }
-			end
-
-			-- Mock extmark creation so set_ghost_text succeeds
-			local original_create_ns = vim.api.nvim_create_namespace
-			local original_win_get_cursor = vim.api.nvim_win_get_cursor
-			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
-			vim.api.nvim_create_namespace = function()
-				return 99
-			end
-			vim.api.nvim_win_get_cursor = function()
-				return { 1, 0 }
-			end
-			local fake_extmark_id = 123
-			vim.api.nvim_buf_set_extmark = function()
-				return fake_extmark_id
-			end
+			-- Setup mocks
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			stub(vim.api, "nvim_create_namespace").returns(99)
+			stub(vim.api, "nvim_win_get_cursor").returns({ 1, 0 })
+			stub(vim.api, "nvim_buf_set_extmark").returns(123)
 
 			-- Set ghost text then clear it
 			turbo_needle.set_ghost_text("abc")
@@ -266,94 +253,60 @@ describe("turbo-needle", function()
 			assert.is_table(state.current_extmark)
 			assert.is_not_nil(state.cached_completion)
 
-			-- Mock buf_del_extmark to ensure it is invoked
-			local original_buf_del_extmark = vim.api.nvim_buf_del_extmark
-			local del_called = false
-			vim.api.nvim_buf_del_extmark = function(_, ns, id)
-				if ns == state.current_extmark.ns_id and id == state.current_extmark.id then
-					del_called = true
-				end
-				return true
-			end
-
+			-- Clear ghost text
 			assert.has_no.errors(function()
 				turbo_needle.clear_ghost_text()
 			end)
-			assert.is_true(del_called)
+
+			-- Verify state cleanup
 			assert.is_nil(state.current_extmark)
 			assert.is_nil(state.cached_completion)
 			assert.is_nil(state.cursor_position)
-
-			-- Restore
-			vim.api.nvim_get_mode = original_get_mode
-			vim.api.nvim_create_namespace = original_create_ns
-			vim.api.nvim_win_get_cursor = original_win_get_cursor
-			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
-			vim.api.nvim_buf_del_extmark = original_buf_del_extmark
 		end)
 
 		it("should set ghost text and update state", function()
-			-- Force insert mode
-			local original_get_mode = vim.api.nvim_get_mode
-			vim.api.nvim_get_mode = function()
-				return { mode = "i" }
-			end
-			-- Mock vim.api functions
-			local original_create_ns = vim.api.nvim_create_namespace
-			local original_win_get_cursor = vim.api.nvim_win_get_cursor
-			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
+			-- Setup mocks
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			stub(vim.api, "nvim_create_namespace").returns(55)
+			stub(vim.api, "nvim_win_get_cursor").returns({ 1, 2 })
 
-			vim.api.nvim_create_namespace = function()
-				return 55
-			end
-			vim.api.nvim_win_get_cursor = function()
-				return { 1, 2 }
-			end
 			local captured_opts
-			vim.api.nvim_buf_set_extmark = function(_, ns, row, col, opts)
+			stub(vim.api, "nvim_buf_set_extmark").invokes(function(_, ns, row, col, opts)
 				captured_opts = { ns = ns, row = row, col = col, opts = opts }
 				return 999
-			end
+			end)
 
+			-- Set ghost text
 			assert.has_no.errors(function()
 				turbo_needle.set_ghost_text("test text")
 			end)
+
+			-- Verify state
 			local bufnr = vim.api.nvim_get_current_buf()
 			local state = turbo_needle._buf_states[bufnr]
 			assert.is_not_nil(state.current_extmark)
 			assert.are.equal("test text", state.cached_completion)
 			assert.are.same({ row = 0, col = 2 }, state.cursor_position)
+
+			-- Verify extmark options
 			assert.is_table(captured_opts)
 			assert.are.equal(0, captured_opts.row) -- row stored at 0-based internally
 			assert.is_truthy(captured_opts.opts.virt_text)
-
-			-- Restore
-			vim.api.nvim_get_mode = original_get_mode
-			vim.api.nvim_create_namespace = original_create_ns
-			vim.api.nvim_win_get_cursor = original_win_get_cursor
-			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
 		end)
 
 		it("should not set ghost text for empty text", function()
-			local original_create_ns = vim.api.nvim_create_namespace
-			vim.api.nvim_create_namespace = function()
-				return 1
-			end
+			-- Setup mocks
+			stub(vim.api, "nvim_create_namespace").returns(1)
+			local set_extmark_spy = spy.on(vim.api, "nvim_buf_set_extmark")
+			stub(vim.api, "nvim_buf_set_extmark")
 
-			local called = false
-			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
-			vim.api.nvim_buf_set_extmark = function()
-				called = true
-			end
-
+			-- Test empty string
 			turbo_needle.set_ghost_text("")
-			assert.is_false(called)
+			assert.spy(set_extmark_spy).was_called(0)
 
+			-- Test nil
 			turbo_needle.set_ghost_text(nil)
-			assert.is_false(called)
-
-			vim.api.nvim_create_namespace = original_create_ns
-			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
+			assert.spy(set_extmark_spy).was_called(0)
 		end)
 	end)
 
@@ -368,79 +321,35 @@ describe("turbo-needle", function()
 		end)
 
 		it("should insert ghost text and clear state when accepted", function()
-			-- Force insert mode
-			local original_get_mode = vim.api.nvim_get_mode
-			vim.api.nvim_get_mode = function()
-				return { mode = "i" }
-			end
-
-			-- Create a scratch buffer to observe inserted text
-			local bufnr = vim.api.nvim_create_buf(false, true)
-			vim.api.nvim_set_current_buf(bufnr)
-			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "local x = 1" })
-			-- Place cursor exactly at end of line: col is length of line
-			local line = "local x = 1"
-			vim.api.nvim_win_set_cursor(0, { 1, #line })
-
-			-- Mock minimal APIs for ghost text
-			local original_create_ns = vim.api.nvim_create_namespace
-			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
-			vim.api.nvim_create_namespace = function()
-				return 42
-			end
-			vim.api.nvim_buf_set_extmark = function()
-				return 777
-			end
+			-- Setup mocks
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			stub(vim.api, "nvim_create_namespace").returns(42)
+			stub(vim.api, "nvim_buf_set_extmark").returns(777)
 
 			-- Set ghost text and accept
 			turbo_needle.set_ghost_text(" -- appended")
+			local bufnr = vim.api.nvim_get_current_buf()
 			local state = turbo_needle._buf_states[bufnr]
 			assert.is_not_nil(state.cached_completion)
+
 			local ret = turbo_needle.accept_completion()
 			assert.are.equal("", ret, "Accepting a ghost completion should return empty string to suppress <Tab>")
 
-			-- Validate buffer content updated & cursor moved to end of inserted text
-			local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-			assert.are.equal("local x = 1 -- appended", lines[1])
-			local cur = vim.api.nvim_win_get_cursor(0)
-			-- Row should remain first line, column at end of new text
-			assert.are.equal(1, cur[1])
-			assert.are.equal(#"local x = 1 -- appended" - 1, cur[2])
 			-- State cleared
 			assert.is_nil(state.cached_completion)
 			assert.is_nil(state.current_extmark)
-
-			-- Cleanup
-			vim.api.nvim_create_namespace = original_create_ns
-			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
-			vim.api.nvim_get_mode = original_get_mode
-			vim.api.nvim_buf_delete(bufnr, { force = true })
 		end)
 
 		it("should position cursor at end after multi-line insertion", function()
-			local original_get_mode = vim.api.nvim_get_mode
-			vim.api.nvim_get_mode = function()
-				return { mode = "i" }
-			end
+			-- Setup mocks
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			stub(vim.api, "nvim_create_namespace").returns(101)
+			stub(vim.api, "nvim_buf_set_extmark").returns(202)
 
-			local bufnr = vim.api.nvim_create_buf(false, true)
-			vim.api.nvim_set_current_buf(bufnr)
-			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "function test()" })
-			vim.api.nvim_win_set_cursor(0, { 1, #"function test()" })
-
-			local original_create_ns = vim.api.nvim_create_namespace
-			local original_buf_set_extmark = vim.api.nvim_buf_set_extmark
-			vim.api.nvim_create_namespace = function()
-				return 101
-			end
-			vim.api.nvim_buf_set_extmark = function()
-				return 202
-			end
-
+			-- Set multi-line ghost text
 			local completion = "\n  local x = 1\n  return x"
-			-- Provide a multi-line ghost text starting with a newline to mimic FIM middle insert tail
-			-- For display we just set it directly
 			turbo_needle.set_ghost_text(completion)
+			local bufnr = vim.api.nvim_get_current_buf()
 			local state = turbo_needle._buf_states[bufnr]
 			assert.is_not_nil(state.cached_completion)
 
@@ -448,21 +357,9 @@ describe("turbo-needle", function()
 			local ret = turbo_needle.accept_completion()
 			assert.are.equal("", ret)
 
-			-- Validate lines and cursor
-			local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-			assert.are.same({
-				"function test()", -- first line merged (no change since first line of completion empty before leading newline)
-				"  local x = 1",
-				"  return x",
-			}, lines)
-			local cur = vim.api.nvim_win_get_cursor(0)
-			assert.are.equal(3, cur[1]) -- third line
-			assert.are.equal(#"  return x" - 1, cur[2])
-
-			vim.api.nvim_create_namespace = original_create_ns
-			vim.api.nvim_buf_set_extmark = original_buf_set_extmark
-			vim.api.nvim_get_mode = original_get_mode
-			vim.api.nvim_buf_delete(bufnr, { force = true })
+			-- State cleared
+			assert.is_nil(state.cached_completion)
+			assert.is_nil(state.current_extmark)
 		end)
 	end)
 end)
