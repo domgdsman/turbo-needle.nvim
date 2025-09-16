@@ -1,164 +1,155 @@
+---@diagnostic disable: undefined-field
+
 local turbo_needle = require("turbo-needle")
+local stub = require("luassert.stub")
+local spy = require("luassert.spy")
+local async = require("plenary.async")
 
 -- Tests focused on completion caching and request cancellation logic
 
-describe("turbo-needle caching and cancellation", function()
-	before_each(function()
+-- Helper: Setup common mocks for caching tests
+local function setup_caching_mocks()
+	local mocks = {}
+
+	-- Mock vim mode
+	mocks.mode_stub = stub(vim.api, "nvim_get_mode")
+	vim.api.nvim_get_mode.returns({ mode = "i" })
+
+	-- Mock context
+	local context = require("turbo-needle.context")
+	mocks.context_supported_stub = stub(context, "is_filetype_supported")
+	context.is_filetype_supported.returns(true)
+
+	return context, mocks
+end
+
+-- Helper: Setup API mocks with completion text
+local function setup_api_mocks(api_module, completion_text)
+	local api_spy = spy.on(api_module, "get_completion")
+	stub(api_module, "get_completion")
+	api_module.get_completion.invokes(function(_, callback)
+		callback(nil, { choices = { { text = completion_text } } })
+	end)
+	return api_spy
+end
+
+-- Helper: Setup ghost text spy
+local function setup_ghost_text_spy()
+	local ghost_spy = spy.on(turbo_needle, "set_ghost_text")
+	stub(turbo_needle, "set_ghost_text")
+	turbo_needle.set_ghost_text.invokes(function(text)
+		-- Simulate setting ghost text state
+		local bufnr = vim.api.nvim_get_current_buf()
+		turbo_needle._buf_states = turbo_needle._buf_states or {}
+		turbo_needle._buf_states[bufnr] = {
+			cached_completion = text,
+			current_extmark = { ns_id = 2025, id = 8080 },
+			cursor_position = { row = 0, col = 0 },
+		}
+		return true
+	end)
+	return ghost_spy
+end
+
+async.tests.describe("turbo-needle caching and cancellation", function()
+	async.tests.before_each(function()
 		package.loaded["turbo-needle"] = nil
 		turbo_needle = require("turbo-needle")
 	end)
 
-	it("should cache a completion and reuse it for identical context", function()
-		-- Force insert mode
-		local original_get_mode = vim.api.nvim_get_mode
-		vim.api.nvim_get_mode = function()
-			return { mode = "i" }
-		end
+	async.tests.it(
+		"should cache a completion and reuse it for identical context",
+		async.void(function()
+			-- Setup mocks
+			local context, mocks = setup_caching_mocks()
+			local context_spy = spy.on(context, "get_current_context")
+			stub(context, "get_current_context")
+			context.get_current_context.returns({ prefix = "print(", suffix = ")" })
 
-		-- Mock context
-		local context = require("turbo-needle.context")
-		local original_get_ctx = context.get_current_context
-		local original_is_supported = context.is_filetype_supported
-		context.is_filetype_supported = function()
-			return true
-		end
-		local ctx_call_count = 0
-		context.get_current_context = function()
-			ctx_call_count = ctx_call_count + 1
-			return { prefix = "print(", suffix = ")" }
-		end
+			local api = require("turbo-needle.api")
+			local api_spy = setup_api_mocks(api, "'cached'")
+			local ghost_spy = setup_ghost_text_spy()
 
-		-- Mock API to return result only first time
-		local api = require("turbo-needle.api")
-		local original_get_completion = api.get_completion
-		local api_calls = 0
-		api.get_completion = function(data, callback)
-			api_calls = api_calls + 1
-			callback(nil, { choices = { { text = "'cached'" } } })
-			return nil
-		end
+			-- First completion (triggers API)
+			local async_complete = async.wrap(turbo_needle.complete, 1)
+			async_complete()
+			async.util.sleep(10)
 
-		-- Mock set_ghost_text to capture value
-		local original_set_ghost = turbo_needle.set_ghost_text
-		local ghost_calls = {}
-		turbo_needle.set_ghost_text = function(text)
-			table.insert(ghost_calls, text)
-			original_set_ghost(text)
-		end
+			-- Second completion (should use cache, not call API again)
+			async_complete()
+			async.util.sleep(10)
 
-		-- First completion (triggers API)
-		turbo_needle.complete()
-		vim.wait(50)
-		-- Second completion (should use cache, not call API again)
-		turbo_needle.complete()
-		vim.wait(50)
+			-- Assertions
+			assert.spy(api_spy).was_called(1)
+			assert.spy(ghost_spy).was_called(2)
+			assert.spy(ghost_spy).was_called_with("'cached'")
+			assert.spy(context_spy).was_called(1) -- Context should only be called once due to caching
+		end)
+	)
 
-		assert.are.equal(1, api_calls, "API should have been called only once for identical context")
-		assert.is_true(#ghost_calls >= 2, "Ghost text should be set twice (first + cached)")
-		assert.are.equal("'cached'", ghost_calls[1])
-		assert.are.equal("'cached'", ghost_calls[#ghost_calls])
+	async.tests.it(
+		"should cancel earlier completion responses when a newer request is made",
+		async.void(function()
+			-- Setup mocks
+			local context, mocks = setup_caching_mocks()
+			local prefix_variant = 0
+			stub(context, "get_current_context")
+			context.get_current_context.invokes(function()
+				prefix_variant = prefix_variant + 1
+				return { prefix = "v" .. prefix_variant, suffix = "" }
+			end)
 
-		-- Restore
-		vim.api.nvim_get_mode = original_get_mode
-		context.get_current_context = original_get_ctx
-		context.is_filetype_supported = original_is_supported
-		api.get_completion = original_get_completion
-		turbo_needle.set_ghost_text = original_set_ghost
-	end)
+			local api = require("turbo-needle.api")
+			local api_spy = spy.on(api, "get_completion")
+			stub(api, "get_completion")
+			api.get_completion.invokes(function(data, callback)
+				-- Defer invocation to simulate async responses arriving out of order
+				local this_prefix = data.prefix
+				vim.defer_fn(function()
+					callback(nil, { choices = { { text = this_prefix .. "_resp" } } })
+				end, this_prefix == "v1" and 40 or 10) -- First call delayed longer
+			end)
 
-	it("should cancel earlier completion responses when a newer request is made", function()
-		local original_get_mode = vim.api.nvim_get_mode
-		vim.api.nvim_get_mode = function()
-			return { mode = "i" }
-		end
+			local ghost_spy = setup_ghost_text_spy()
 
-		local context = require("turbo-needle.context")
-		local original_get_ctx = context.get_current_context
-		local original_is_supported = context.is_filetype_supported
-		context.is_filetype_supported = function()
-			return true
-		end
-		local prefix_variant = 0
-		context.get_current_context = function()
-			prefix_variant = prefix_variant + 1
-			return { prefix = "v" .. prefix_variant, suffix = "" }
-		end
+			-- Fire two completes rapidly; second should cancel first
+			local async_complete = async.wrap(turbo_needle.complete, 1)
+			async_complete() -- v1
+			async.util.sleep(5)
+			async_complete() -- v2 (should cancel v1)
+			async.util.sleep(80) -- wait long enough for both callbacks
 
-		local api = require("turbo-needle.api")
-		local original_get_completion = api.get_completion
-		local callbacks = {}
-		api.get_completion = function(data, callback)
-			-- Defer invocation to simulate async responses arriving out of order
-			local this_prefix = data.prefix
-			vim.defer_fn(function()
-				callback(nil, { choices = { { text = this_prefix .. "_resp" } } })
-			end, this_prefix == "v1" and 40 or 10) -- First call delayed longer to simulate late arrival
-			return nil
-		end
+			-- Latest request's response should win
+			assert.spy(ghost_spy).was_called_with("v2_resp")
+			assert.spy(api_spy).was_called(2)
+		end)
+	)
 
-		local original_set_ghost = turbo_needle.set_ghost_text
-		local last_set
-		turbo_needle.set_ghost_text = function(text)
-			last_set = text
-			original_set_ghost(text)
-		end
+	async.tests.it(
+		"should respect enable/disable toggling",
+		async.void(function()
+			-- Setup mocks
+			local context, mocks = setup_caching_mocks()
+			stub(context, "get_current_context")
+			context.get_current_context.returns({ prefix = "A", suffix = "" })
 
-		-- Fire two completes rapidly; second should cancel first
-		turbo_needle.complete() -- v1
-		vim.wait(5)
-		turbo_needle.complete() -- v2 (should cancel v1)
-		vim.wait(80) -- wait long enough for both callbacks
+			local api = require("turbo-needle.api")
+			local api_spy = setup_api_mocks(api, "A_resp")
 
-		assert.are.equal("v2_resp", last_set, "Latest request's response should win; earlier should be ignored")
+			local async_complete = async.wrap(turbo_needle.complete, 1)
 
-		-- Restore
-		vim.api.nvim_get_mode = original_get_mode
-		context.get_current_context = original_get_ctx
-		context.is_filetype_supported = original_is_supported
-		api.get_completion = original_get_completion
-		turbo_needle.set_ghost_text = original_set_ghost
-	end)
+			-- Disable completions and call
+			turbo_needle.disable()
+			async_complete()
+			async.util.sleep(10)
 
-	it("should respect enable/disable toggling", function()
-		local original_get_mode = vim.api.nvim_get_mode
-		vim.api.nvim_get_mode = function()
-			return { mode = "i" }
-		end
+			-- Re-enable and call again
+			turbo_needle.enable()
+			async_complete()
+			async.util.sleep(10)
 
-		local context = require("turbo-needle.context")
-		local original_get_ctx = context.get_current_context
-		local original_is_supported = context.is_filetype_supported
-		context.is_filetype_supported = function()
-			return true
-		end
-		context.get_current_context = function()
-			return { prefix = "A", suffix = "" }
-		end
-
-		local api = require("turbo-needle.api")
-		local original_get_completion = api.get_completion
-		local api_called = 0
-		api.get_completion = function(_, callback)
-			api_called = api_called + 1
-			callback(nil, { choices = { { text = "A_resp" } } })
-		end
-
-		-- Disable completions and call
-		turbo_needle.disable()
-		-- Directly invoke complete; should early return because not in insert or disabled state gating occurs in trigger logic
-		turbo_needle.complete()
-		vim.wait(20)
-		-- Re-enable and call again
-		turbo_needle.enable()
-		turbo_needle.complete()
-		vim.wait(20)
-
-		assert.are.equal(1, api_called, "API should be called only after re-enabled")
-
-		-- Restore
-		vim.api.nvim_get_mode = original_get_mode
-		context.get_current_context = original_get_ctx
-		context.is_filetype_supported = original_is_supported
-		api.get_completion = original_get_completion
-	end)
+			-- API should be called only after re-enabled
+			assert.spy(api_spy).was_called(1)
+		end)
+	)
 end)
