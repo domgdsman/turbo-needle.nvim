@@ -36,26 +36,31 @@ M.defaults = {
 }
 
 function M.validate(config)
-	vim.validate({
-		api = { config.api, "table" },
-		completions = { config.completions, "table" },
-		keymaps = { config.keymaps, "table" },
-		filetypes = { config.filetypes, "table" },
-	})
+	vim.validate("config", config, "table")
+	vim.validate("config.api", config.api, "table")
+	vim.validate("config.completions", config.completions, "table")
+	vim.validate("config.keymaps", config.keymaps, "table")
+	vim.validate("config.filetypes", config.filetypes, "table")
 
-	vim.validate({
-		["api.base_url"] = { config.api.base_url, "string" },
-		["api.model"] = { config.api.model, "string" },
-		["api.timeout"] = { config.api.timeout, "number" },
-		["api.max_retries"] = { config.api.max_retries, "number" },
-		["completions.debounce_ms"] = { config.completions.debounce_ms, "number" },
-	})
+	vim.validate("api.base_url", config.api.base_url, "string")
+	vim.validate("api.model", config.api.model, "string")
+	vim.validate("api.timeout", config.api.timeout, "number")
+	vim.validate("api.max_retries", config.api.max_retries, "number")
+	vim.validate("completions.debounce_ms", config.completions.debounce_ms, "number")
 
 	-- Validate api_key_name is string when set
 	if config.api.api_key_name ~= nil then
-		vim.validate({
-			["api.api_key_name"] = { config.api.api_key_name, "string" },
-		})
+		vim.validate("api.api_key_name", config.api.api_key_name, "string")
+	end
+
+	-- Validate max_tokens is number when set
+	if config.api.max_tokens ~= nil then
+		vim.validate("api.max_tokens", config.api.max_tokens, "number")
+	end
+
+	-- Validate temperature is number when set
+	if config.api.temperature ~= nil then
+		vim.validate("api.temperature", config.api.temperature, "number")
 	end
 
 	-- Validate max_tokens is number when set
@@ -74,38 +79,28 @@ function M.validate(config)
 
 	-- Validate top_p is number when set
 	if config.api.top_p ~= nil then
-		vim.validate({
-			["api.top_p"] = { config.api.top_p, "number" },
-		})
+		vim.validate("api.top_p", config.api.top_p, "number")
 	end
 
 	-- Validate top_k is number when set
 	if config.api.top_k ~= nil then
-		vim.validate({
-			["api.top_k"] = { config.api.top_k, "number" },
-		})
+		vim.validate("api.top_k", config.api.top_k, "number")
 	end
 
 	-- Validate repetition_penalty is number when set
 	if config.api.repetition_penalty ~= nil then
-		vim.validate({
-			["api.repetition_penalty"] = { config.api.repetition_penalty, "number" },
-		})
+		vim.validate("api.repetition_penalty", config.api.repetition_penalty, "number")
 	end
 
 	-- Validate parse_response is function when set
 	if config.api.parse_response ~= nil then
-		vim.validate({
-			["api.parse_response"] = { config.api.parse_response, "function" },
-		})
+		vim.validate("api.parse_response", config.api.parse_response, "function")
 	end
 
 	-- Validate filetypes table values are booleans
 	if config.filetypes then
 		for filetype, enabled in pairs(config.filetypes) do
-			vim.validate({
-				["filetypes." .. filetype] = { enabled, "boolean" },
-			})
+			vim.validate("filetypes." .. filetype, enabled, "boolean")
 		end
 	end
 
