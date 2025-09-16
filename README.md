@@ -20,10 +20,12 @@ AI code completions for Neovim.
       keymaps = {
         accept = "<Tab>",
       },
-      filetypes = {
-        enabled = { "lua", "python", "javascript", "typescript", "rust", "go" },
-        disabled = { "help", "gitcommit", "gitrebase", "hgcommit" },
-      },
+       filetypes = {
+         help = false,
+         gitcommit = false,
+         gitrebase = false,
+         hgcommit = false,
+       },
     })
   end,
 }

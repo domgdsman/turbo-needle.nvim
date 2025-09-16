@@ -35,10 +35,11 @@ describe("turbo-needle.config", function()
 
 		it("should have default filetypes", function()
 			local filetypes = config.defaults.filetypes
-			assert.is_table(filetypes.enabled)
-			assert.is_table(filetypes.disabled)
-			assert.are.equal("lua", filetypes.enabled[1])
-			assert.are.equal("markdown", filetypes.disabled[1])
+			assert.is_false(filetypes.help)
+			assert.is_false(filetypes.gitcommit)
+			assert.is_false(filetypes.gitrebase)
+			assert.is_false(filetypes.hgcommit)
+			assert.is_nil(filetypes.lua) -- unspecified filetypes should not be in defaults
 		end)
 	end)
 
@@ -66,7 +67,7 @@ describe("turbo-needle.config", function()
 				},
 				completions = { debounce_ms = 300, throttle_ms = 1000 },
 				keymaps = { accept = "<Tab>" },
-				filetypes = { enabled = {}, disabled = {} },
+				filetypes = {},
 			}))
 		end)
 
@@ -82,7 +83,7 @@ describe("turbo-needle.config", function()
 					},
 					completions = { debounce_ms = 300, throttle_ms = 600 },
 					keymaps = { accept = "<Tab>" },
-					filetypes = { enabled = {}, disabled = {} },
+					filetypes = {},
 				})
 			end)
 		end)
@@ -99,7 +100,7 @@ describe("turbo-needle.config", function()
 				},
 				completions = { debounce_ms = 300, throttle_ms = 600 },
 				keymaps = { accept = "<Tab>" },
-				filetypes = { enabled = {}, disabled = {} },
+				filetypes = {},
 			}))
 		end)
 
@@ -115,7 +116,7 @@ describe("turbo-needle.config", function()
 					},
 					completions = { debounce_ms = 300, throttle_ms = 600 },
 					keymaps = { accept = "<Tab>" },
-					filetypes = { enabled = {}, disabled = {} },
+					filetypes = {},
 				})
 			end)
 		end)
@@ -132,7 +133,7 @@ describe("turbo-needle.config", function()
 					},
 					completions = { debounce_ms = 300, throttle_ms = 600 },
 					keymaps = { accept = "<Tab>" },
-					filetypes = { enabled = {}, disabled = {} },
+					filetypes = {},
 				})
 			end)
 		end)
@@ -151,7 +152,7 @@ describe("turbo-needle.config", function()
 					},
 					completions = { debounce_ms = 300 },
 					keymaps = { accept = "<Tab>" },
-					filetypes = { enabled = {}, disabled = {} },
+					filetypes = {},
 				})
 			end)
 		end)
@@ -168,7 +169,7 @@ describe("turbo-needle.config", function()
 					},
 					completions = { debounce_ms = 300 },
 					keymaps = { accept = "<Tab>" },
-					filetypes = { enabled = {}, disabled = {} },
+					filetypes = {},
 				})
 			end)
 		end)

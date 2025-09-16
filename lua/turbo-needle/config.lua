@@ -28,8 +28,10 @@ M.defaults = {
 		accept = "<Tab>",
 	},
 	filetypes = {
-		enabled = { "lua", "python", "javascript", "typescript", "rust", "go", "c", "cpp" },
-		disabled = { "markdown", "text", "gitcommit", "help" },
+		help = false,
+		gitcommit = false,
+		gitrebase = false,
+		hgcommit = false,
 	},
 }
 
@@ -96,6 +98,15 @@ function M.validate(config)
 		vim.validate({
 			["api.parse_response"] = { config.api.parse_response, "function" },
 		})
+	end
+
+	-- Validate filetypes table values are booleans
+	if config.filetypes then
+		for filetype, enabled in pairs(config.filetypes) do
+			vim.validate({
+				["filetypes." .. filetype] = { enabled, "boolean" },
+			})
+		end
 	end
 
 	return true

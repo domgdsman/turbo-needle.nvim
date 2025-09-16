@@ -112,7 +112,7 @@ describe("turbo-needle.context", function()
 
 			-- Setup turbo-needle with custom config
 			turbo_needle.setup({
-				filetypes = { enabled = { "lua", "python" }, disabled = {} },
+				filetypes = { lua = true, python = true },
 			})
 
 			vim.bo.filetype = "lua"
@@ -127,7 +127,7 @@ describe("turbo-needle.context", function()
 
 			-- Setup turbo-needle with custom config
 			turbo_needle.setup({
-				filetypes = { enabled = { "lua" }, disabled = { "python" } },
+				filetypes = { lua = true, python = false },
 			})
 
 			vim.bo.filetype = "python"
@@ -139,7 +139,7 @@ describe("turbo-needle.context", function()
 
 			-- Setup turbo-needle with custom config
 			turbo_needle.setup({
-				filetypes = { enabled = { "lua" }, disabled = {} },
+				filetypes = { lua = true },
 			})
 
 			vim.bo.filetype = "javascript"

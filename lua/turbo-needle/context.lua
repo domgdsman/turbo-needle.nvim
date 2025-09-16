@@ -149,27 +149,12 @@ function M.is_filetype_supported()
 	local config = turbo_needle.get_config()
 	local filetype = vim.bo.filetype
 
-	-- Check if filetype is in disabled list first (disabled takes precedence)
-	if config.filetypes.disabled then
-		for _, disabled_type in ipairs(config.filetypes.disabled) do
-			if filetype == disabled_type then
-				return false
-			end
-		end
-	end
-
-	-- Check if filetype is in enabled list
-	if config.filetypes.enabled then
-		for _, enabled_type in ipairs(config.filetypes.enabled) do
-			if filetype == enabled_type then
-				return true
-			end
-		end
+	-- Check if filetype is explicitly configured
+	if config.filetypes[filetype] ~= nil then
+		return config.filetypes[filetype]
 	end
 
 	-- Default: allow if not explicitly disabled
-	-- Note: This means the enabled list acts as a preference/priority list,
-	-- not as an exclusive allowlist. All non-disabled types are allowed.
 	return true
 end
 
