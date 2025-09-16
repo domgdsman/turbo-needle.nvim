@@ -1,6 +1,7 @@
 ---@diagnostic disable: undefined-field, need-check-nil
 
 local context = require("turbo-needle.context")
+local mock = require("luassert.mock")
 
 describe("turbo-needle.context", function()
 	describe("extract_context", function()
@@ -75,10 +76,8 @@ describe("turbo-needle.context", function()
 
 	describe("get_current_context", function()
 		it("should get context from current buffer and cursor", function()
-			-- Mock vim.api functions for testing
-			local original_get_current_buf = vim.api.nvim_get_current_buf
-			local original_win_get_cursor = vim.api.nvim_win_get_cursor
-			local original_buf_get_lines = vim.api.nvim_buf_get_lines
+			-- Mock vim.api for testing
+			local api = mock(vim.api, true)
 
 			-- Create test buffer content
 			local test_lines = {
@@ -86,33 +85,33 @@ describe("turbo-needle.context", function()
 				"print(x)",
 			}
 
-			vim.api.nvim_get_current_buf = function()
-				return 1
-			end
-			vim.api.nvim_win_get_cursor = function()
-				return { 2, 6 }
-			end -- 1-based: line 2, col 6 (0-based)
-			vim.api.nvim_buf_get_lines = function(bufnr, start, end_, strict)
+			-- Setup mock expectations
+			api.nvim_get_current_buf.returns(1)
+			api.nvim_win_get_cursor.returns({ 2, 6 }) -- 1-based: line 2, col 6 (0-based)
+			api.nvim_buf_get_lines.invokes(function(bufnr, start, end_, strict)
 				return test_lines
-			end
+			end)
 
 			local result = context.get_current_context()
 
 			assert.are.equal("local x = 1\nprint(", result.prefix)
 			assert.are.equal("x)", result.suffix)
 
-			-- Restore
-			vim.api.nvim_get_current_buf = original_get_current_buf
-			vim.api.nvim_win_get_cursor = original_win_get_cursor
-			vim.api.nvim_buf_get_lines = original_buf_get_lines
+			-- Verify functions were called with expected arguments
+			assert.stub(api.nvim_get_current_buf).was_called()
+			assert.stub(api.nvim_win_get_cursor).was_called()
+			assert.stub(api.nvim_buf_get_lines).was_called_with(1, 0, -1, false)
+
+			mock.revert(api)
 		end)
 	end)
 
 	describe("is_filetype_supported", function()
 		it("should return true for enabled filetype", function()
-			local config = require("turbo-needle.config")
-			local original_defaults = config.defaults
-			config.defaults = vim.tbl_deep_extend("force", config.defaults, {
+			local turbo_needle = require("turbo-needle")
+
+			-- Setup turbo-needle with custom config
+			turbo_needle.setup({
 				filetypes = { enabled = { "lua", "python" }, disabled = {} },
 			})
 
@@ -121,8 +120,6 @@ describe("turbo-needle.context", function()
 
 			vim.bo.filetype = "python"
 			assert.is_true(context.is_filetype_supported())
-
-			config.defaults = original_defaults
 		end)
 
 		it("should return false for disabled filetype", function()
@@ -138,16 +135,15 @@ describe("turbo-needle.context", function()
 		end)
 
 		it("should return true for unspecified filetype when not disabled", function()
-			local config = require("turbo-needle.config")
-			local original_defaults = config.defaults
-			config.defaults = vim.tbl_deep_extend("force", config.defaults, {
+			local turbo_needle = require("turbo-needle")
+
+			-- Setup turbo-needle with custom config
+			turbo_needle.setup({
 				filetypes = { enabled = { "lua" }, disabled = {} },
 			})
 
 			vim.bo.filetype = "javascript"
 			assert.is_true(context.is_filetype_supported())
-
-			config.defaults = original_defaults
 		end)
 	end)
 end)
