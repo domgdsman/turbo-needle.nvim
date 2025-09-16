@@ -274,6 +274,12 @@ describe("turbo-needle", function()
 			stub(vim.api, "nvim_create_namespace").returns(42)
 			stub(vim.api, "nvim_buf_set_extmark").returns(777)
 
+			-- Mock vim.schedule to execute synchronously for testing
+			local schedule_stub = stub(vim, "schedule")
+			schedule_stub.invokes(function(callback)
+				callback() -- Execute immediately for testing
+			end)
+
 			-- Set ghost text and accept
 			turbo_needle.set_ghost_text(" -- appended")
 			local bufnr = vim.api.nvim_get_current_buf()
@@ -283,9 +289,15 @@ describe("turbo-needle", function()
 			local ret = turbo_needle.accept_completion()
 			assert.are.equal("", ret, "Accepting a ghost completion should return empty string to suppress <Tab>")
 
+			-- Verify schedule was called
+			assert.stub(schedule_stub).was_called()
+
 			-- State cleared
 			assert.is_nil(state.cached_completion)
 			assert.is_nil(state.current_extmark)
+
+			-- Restore original vim.schedule
+			schedule_stub:revert()
 		end)
 
 		it("should position cursor at end after multi-line insertion", function()
@@ -293,6 +305,12 @@ describe("turbo-needle", function()
 			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
 			stub(vim.api, "nvim_create_namespace").returns(101)
 			stub(vim.api, "nvim_buf_set_extmark").returns(202)
+
+			-- Mock vim.schedule to execute synchronously for testing
+			local schedule_stub = stub(vim, "schedule")
+			schedule_stub.invokes(function(callback)
+				callback() -- Execute immediately for testing
+			end)
 
 			-- Set multi-line ghost text
 			local completion = "\n  local x = 1\n  return x"
@@ -305,9 +323,15 @@ describe("turbo-needle", function()
 			local ret = turbo_needle.accept_completion()
 			assert.are.equal("", ret)
 
+			-- Verify schedule was called
+			assert.stub(schedule_stub).was_called()
+
 			-- State cleared
 			assert.is_nil(state.cached_completion)
 			assert.is_nil(state.current_extmark)
+
+			-- Restore original vim.schedule
+			schedule_stub:revert()
 		end)
 	end)
 end)

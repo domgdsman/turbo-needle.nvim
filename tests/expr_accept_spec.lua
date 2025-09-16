@@ -66,21 +66,19 @@ end
 
 -- Helper: Test async schedule behavior
 local function test_async_schedule()
-	local schedule_called = false
-	local original_schedule = vim.schedule
+	local schedule_stub = stub(vim, "schedule")
 	local async_completed = false
 
-	vim.schedule = function(callback)
-		schedule_called = true
+	schedule_stub.invokes(function(callback)
 		vim.defer_fn(function()
 			callback()
 			async_completed = true
 		end, 1)
-	end
+	end)
 
 	return {
-		schedule_called = function()
-			return schedule_called
+		schedule_stub = function()
+			return schedule_stub
 		end,
 		async_completed = function()
 			return async_completed
@@ -91,7 +89,7 @@ local function test_async_schedule()
 			end
 		end,
 		restore = function()
-			vim.schedule = original_schedule
+			schedule_stub:revert()
 		end,
 	}
 end
@@ -132,7 +130,7 @@ async.tests.describe("turbo-needle expr mapping acceptance", function()
 			async_test.wait_completion()
 
 			-- Assert: Schedule behavior
-			assert.is_true(async_test.schedule_called(), "vim.schedule should have been called")
+			assert.stub(async_test.schedule_stub()).was_called()
 
 			-- Assert: Buffer state after completion
 			local line = vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1]
