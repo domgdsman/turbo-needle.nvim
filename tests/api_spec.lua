@@ -1,9 +1,9 @@
 ---@diagnostic disable: undefined-field
 
 local api = require("turbo-needle.api")
-local mock = require('luassert.mock')
-local stub = require('luassert.stub')
-local spy = require('luassert.spy')
+local mock = require("luassert.mock")
+local stub = require("luassert.stub")
+local spy = require("luassert.spy")
 
 describe("turbo-needle.api", function()
 	describe("build_curl_args", function()
