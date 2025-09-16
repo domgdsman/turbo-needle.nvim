@@ -45,6 +45,12 @@ describe("turbo-needle", function()
 			-- Mock vim mode to be insert mode
 			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
 
+			-- Make async deterministic for test
+			local schedule_stub = stub(vim, "schedule")
+			schedule_stub.invokes(function(callback)
+				callback()
+			end)
+
 			-- Mock context
 			local context = require("turbo-needle.context")
 			stub(context, "is_filetype_supported").returns(true)
@@ -71,8 +77,9 @@ describe("turbo-needle", function()
 			-- Call complete
 			turbo_needle.complete()
 
-			-- Wait for async callbacks to complete
-			vim.wait(100)
+
+			-- Restore schedule stub
+			schedule_stub:revert()
 
 			assert.is_true(get_completion_called)
 			assert.is_true(set_ghost_called)
@@ -97,6 +104,12 @@ describe("turbo-needle", function()
 			-- Mock vim mode to be insert mode
 			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
 
+			-- Make async deterministic for test
+			local schedule_stub = stub(vim, "schedule")
+			schedule_stub.invokes(function(callback)
+				callback()
+			end)
+
 			local context = require("turbo-needle.context")
 			stub(context, "is_filetype_supported").returns(true)
 			stub(context, "get_current_context").returns({ prefix = "", suffix = "" })
@@ -116,8 +129,8 @@ describe("turbo-needle", function()
 
 			turbo_needle.complete()
 
-			-- Wait for async callbacks to complete
-			vim.wait(100)
+			-- Restore schedule stub
+			schedule_stub:revert()
 
 			assert.is_true(notify_called)
 		end)
@@ -125,6 +138,12 @@ describe("turbo-needle", function()
 		it("should use custom parse_response when provided", function()
 			-- Mock vim mode to be insert mode
 			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+
+			-- Make async deterministic for test
+			local schedule_stub = stub(vim, "schedule")
+			schedule_stub.invokes(function(callback)
+				callback()
+			end)
 
 			-- Setup turbo-needle with custom parse_response
 			turbo_needle.setup({
@@ -157,8 +176,9 @@ describe("turbo-needle", function()
 			-- Call complete
 			turbo_needle.complete()
 
-			-- Wait for async callbacks to complete
-			vim.wait(100)
+
+			-- Restore schedule stub
+			schedule_stub:revert()
 
 			assert.is_true(get_completion_called)
 			assert.is_true(set_ghost_called)
