@@ -7,7 +7,7 @@ local logger_instance
 local function get_instance()
 	if not logger_instance then
 		logger_instance = logging.Logger.new({
-			log_level = vim.log.levels.INFO,
+			log_level = vim.log.levels.DEBUG,
 			prefix = "turbo-needle",
 			echo_messages = true,
 		})

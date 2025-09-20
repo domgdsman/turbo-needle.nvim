@@ -33,6 +33,10 @@ M.defaults = {
 		gitrebase = false,
 		hgcommit = false,
 	},
+	logging = {
+		log_level = nil,
+		echo_messages = nil,
+	},
 }
 
 function M.validate(config)
@@ -41,6 +45,9 @@ function M.validate(config)
 	vim.validate("config.completions", config.completions, "table")
 	vim.validate("config.keymaps", config.keymaps, "table")
 	vim.validate("config.filetypes", config.filetypes, "table")
+	if config.logging then
+		vim.validate("config.logging", config.logging, "table")
+	end
 
 	vim.validate("api.base_url", config.api.base_url, "string")
 	vim.validate("api.model", config.api.model, "string")
@@ -101,6 +108,19 @@ function M.validate(config)
 	if config.filetypes then
 		for filetype, enabled in pairs(config.filetypes) do
 			vim.validate("filetypes." .. filetype, enabled, "boolean")
+		end
+	end
+
+	-- Validate logging fields when logging config is present
+	if config.logging then
+		-- Validate log_level is string when set
+		if config.logging.log_level ~= nil then
+			vim.validate("logging.log_level", config.logging.log_level, "string")
+		end
+
+		-- Validate echo_messages is boolean when set
+		if config.logging.echo_messages ~= nil then
+			vim.validate("logging.echo_messages", config.logging.echo_messages, "boolean")
 		end
 	end
 
