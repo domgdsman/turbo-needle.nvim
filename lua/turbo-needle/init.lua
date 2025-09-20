@@ -364,16 +364,6 @@ function M.complete()
 				completion_text = api.parse_response(result)
 			end
 
-			-- Validate completion text quality
-			local is_valid, validation_error = utils.validate_completion(completion_text, ctx)
-			if not is_valid then
-				-- Don't show warnings for common cases like empty completions
-				if validation_error ~= "Empty completion" and validation_error ~= "Completion too short" then
-					utils.notify("Completion filtered: " .. validation_error, vim.log.levels.DEBUG)
-				end
-				return
-			end
-
 			-- Cache the valid completion
 			cache_completion(ctx, completion_text)
 

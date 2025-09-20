@@ -3,7 +3,6 @@
 local turbo_needle = require("turbo-needle")
 local async = require("plenary.async")
 local stub = require("luassert.stub")
-local spy = require("luassert.spy")
 
 -- Tests focused on completion caching and request cancellation logic
 

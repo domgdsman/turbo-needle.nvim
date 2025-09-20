@@ -2,7 +2,6 @@
 
 local turbo_needle = require("turbo-needle")
 local stub = require("luassert.stub")
-local spy = require("luassert.spy")
 
 describe("turbo-needle", function()
 	local snapshot

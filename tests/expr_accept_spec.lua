@@ -3,7 +3,6 @@
 local turbo_needle = require("turbo-needle")
 local async = require("plenary.async")
 local stub = require("luassert.stub")
-local spy = require("luassert.spy")
 
 -- Helper: Setup test buffer with initial content
 local function setup_test_buffer()
