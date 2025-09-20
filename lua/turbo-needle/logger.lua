@@ -16,25 +16,39 @@ local function get_instance()
 	return logger_instance
 end
 
---- @param config table
+function M.trace(...)
+	get_instance():trace(...)
+end
+
+function M.debug(...)
+	get_instance():debug(...)
+end
+
+function M.info(...)
+	get_instance():info(...)
+end
+
+function M.warn(...)
+	get_instance():warn(...)
+end
+
+function M.error(...)
+	get_instance():error(...)
+end
+
 function M.setup(config)
+	local logger = get_instance()
+
 	if config.log_level then
 		local log_level = logging.parse_log_level(config.log_level)
 		if log_level ~= nil then
-			logger_instance:set_log_level(log_level)
+			logger:set_log_level(log_level)
 		end
 	end
 
 	if config.echo_messages ~= nil then
-		logger_instance:set_echo_messages(config.echo_messages)
+		logger:set_echo_messages(config.echo_messages)
 	end
 end
-
-setmetatable(M, {
-	__index = function(_, key)
-		local logger = get_instance()
-		return logger[key]
-	end,
-})
 
 return M

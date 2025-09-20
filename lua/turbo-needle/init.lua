@@ -1,5 +1,5 @@
 local config = require("turbo-needle.config")
-local utils = require("turbo-needle.utils")
+local logger = require("turbo-needle.logger")
 
 local M = {}
 
@@ -111,7 +111,7 @@ function M.setup(opts)
 	local config_module = require("turbo-needle.config")
 	local success, err = pcall(config_module.validate, _config)
 	if not success then
-		utils.notify("Configuration validation failed: " .. err, vim.log.levels.ERROR)
+		logger.error("Configuration validation failed: " .. err)
 		return
 	end
 
@@ -125,7 +125,7 @@ function M.setup(opts)
 	-- Setup keymaps
 	M.setup_keymaps()
 
-	utils.notify("turbo-needle setup complete", vim.log.levels.INFO)
+	logger.info("setup complete")
 end
 
 function M.setup_keymaps()
@@ -289,13 +289,13 @@ end
 -- Enable completions
 function M.enable()
 	enabled = true
-	utils.notify("[turbo-needle] completions enabled", vim.log.levels.INFO)
+	logger.info("completions enabled", vim.log.levels.INFO)
 end
 
 -- Disable completions
 function M.disable()
 	enabled = false
-	utils.notify("[turbo-needle] completions disabled", vim.log.levels.INFO)
+	logger.info("completions disabled", vim.log.levels.INFO)
 end
 
 -- Completion function: extract context and request completion
@@ -352,7 +352,7 @@ function M.complete()
 			state.active_job = nil
 
 			if err then
-				utils.notify("Completion error: " .. err, vim.log.levels.ERROR)
+				logger.error("Completion error: " .. err)
 				return
 			end
 
@@ -383,7 +383,7 @@ function M.clear_ghost_text()
 			local msg = tostring(err)
 			-- Only warn if it's not a common already-cleared scenario
 			if not (msg:match("Invalid extmark id") or msg:match("Invalid namespace id")) then
-				utils.notify("Failed to clear ghost text extmark", vim.log.levels.WARN)
+				logger.warn("Failed to clear ghost text extmark")
 			end
 		end
 		state.current_extmark = nil
@@ -463,7 +463,7 @@ function M.set_ghost_text(text)
 			priority = 4096,
 		})
 		if not ok then
-			utils.notify("Failed to set multi-line hybrid ghost", vim.log.levels.ERROR)
+			logger.error("Failed to set multi-line hybrid ghost")
 			return
 		end
 		state.current_extmark = { ns_id = ns_id, id = id }
@@ -478,7 +478,7 @@ function M.set_ghost_text(text)
 			priority = 4096,
 		})
 		if not ok then
-			utils.notify("Failed to set ghost text extmark", vim.log.levels.ERROR)
+			logger.error("Failed to set ghost text extmark")
 			return
 		end
 		state.current_extmark = { ns_id = ns_id, id = id }

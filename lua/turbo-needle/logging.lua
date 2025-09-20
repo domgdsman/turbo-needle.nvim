@@ -55,6 +55,7 @@ local function log_message(message, level, self)
 			[LOG_LEVELS.WARN] = "WarningMsg",
 			[LOG_LEVELS.INFO] = "None",
 			[LOG_LEVELS.DEBUG] = "Comment",
+			[LOG_LEVELS.TRACE] = "Comment",
 		})[level] or "Normal"
 
 		vim.api.nvim_echo({ { message, hl_group } }, true, {})
