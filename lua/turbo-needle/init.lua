@@ -105,7 +105,7 @@ function M.get_config()
 end
 
 function M.setup(opts)
-	_config = vim.tbl_deep_extend("force", _config, opts or {})
+	_config = vim.tbl_deep_extend("force", vim.deepcopy(config.defaults), opts or {})
 
 	-- Validate configuration
 	local config_module = require("turbo-needle.config")
