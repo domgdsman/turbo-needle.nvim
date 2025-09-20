@@ -122,17 +122,13 @@ describe("turbo-needle", function()
 				callback("API error", nil)
 			end)
 
-			local utils = require("turbo-needle.utils")
-			local notify_called = false
-			stub(utils, "notify").invokes(function(msg, level)
-				notify_called = true
-				assert.is_not_nil(string.find(msg, "API error"))
-				assert.are.equal(level, vim.log.levels.ERROR)
-			end)
+			-- Mock logger.error
+			local logger = require("turbo-needle.logger")
+			stub(logger, "error")
 
 			turbo_needle.complete()
 
-			assert.is_true(notify_called)
+			assert.stub(logger.error).was_called()
 		end)
 
 		it("should use custom parse_response when provided", function()

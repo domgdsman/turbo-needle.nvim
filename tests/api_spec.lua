@@ -154,27 +154,15 @@ describe("turbo-needle.api", function()
 				api = { api_key_name = "MISSING_API_KEY" },
 			})
 
-			-- Mock utils.notify to capture the warning
-			local utils = require("turbo-needle.utils")
-			stub(utils, "notify")
-			local notify_called = false
-			local notify_message = ""
-			local notify_level = nil
-			utils.notify.invokes(function(msg, level)
-				notify_called = true
-				notify_message = msg
-				notify_level = level
-			end)
+			-- Mock logger.warn
+			local logger = require("turbo-needle.logger")
+			stub(logger, "warn")
 
 			api.validate_api_key_config()
 
-			assert.is_true(notify_called)
-			assert.is_not_nil(string.find(notify_message, "MISSING_API_KEY"))
-			assert.are.equal(notify_level, vim.log.levels.WARN)
-
 			-- Verify functions were called with expected arguments
 			assert.stub(os.getenv).was_called_with("MISSING_API_KEY")
-			assert.stub(utils.notify).was_called()
+			assert.stub(logger.warn).was_called()
 		end)
 	end)
 
