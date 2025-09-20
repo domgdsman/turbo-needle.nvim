@@ -1,10 +1,17 @@
 local M = {}
 
+-- Substitute environment variables in strings like "{env:VAR_NAME}"
+local function substitute_env(str)
+	return (str:gsub("{env:([%w_]+)}", function(var)
+		return os.getenv(var) or ""
+	end))
+end
+
 M.defaults = {
 	api = {
 		base_url = "http://localhost:8080",
 		model = "qwen3-coder",
-		api_key_name = nil, -- Environment variable name for API key (optional)
+		api_key = nil, -- API key or env var reference like "{env:VAR_NAME}" (optional)
 		max_tokens = 256, -- Maximum tokens to generate
 		temperature = nil, -- Optional: Sampling temperature (0.0 to 2.0)
 		top_p = nil, -- Optional: Top-p sampling parameter
@@ -55,9 +62,12 @@ function M.validate(config)
 	vim.validate("api.max_retries", config.api.max_retries, "number")
 	vim.validate("completions.debounce_ms", config.completions.debounce_ms, "number")
 
-	-- Validate api_key_name is string when set
-	if config.api.api_key_name ~= nil then
-		vim.validate("api.api_key_name", config.api.api_key_name, "string")
+	-- Validate api_key is string when set and not empty
+	if config.api.api_key ~= nil then
+		vim.validate("api.api_key", config.api.api_key, "string")
+		if config.api.api_key == "" then
+			error("api.api_key cannot be an empty string", 0)
+		end
 	end
 
 	-- Validate max_tokens is number when set
@@ -125,6 +135,32 @@ function M.validate(config)
 	end
 
 	return true
+end
+
+-- Substitute environment variables in config
+function M.substitute_config_values_from_env(config)
+	-- Substitute environment variables in API key
+	if config.api.api_key then
+		local substituted = substitute_env(config.api.api_key)
+		if substituted == config.api.api_key then
+			-- No substitution occurred, treat as literal value
+			return
+		end
+
+		-- Check if environment variable was found
+		if substituted == "" then
+			error(
+				string.format(
+					"Environment variable in API key configuration '%s' is not set or empty",
+					config.api.api_key
+				),
+				0
+			)
+		end
+
+		-- Successful substitution
+		config.api.api_key = substituted
+	end
 end
 
 return M

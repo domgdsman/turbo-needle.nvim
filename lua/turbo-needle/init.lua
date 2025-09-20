@@ -107,9 +107,16 @@ end
 function M.setup(opts)
 	_config = vim.tbl_deep_extend("force", vim.deepcopy(config.defaults), opts or {})
 
-	-- Validate configuration
+	-- Substitute environment variables in config
 	local config_module = require("turbo-needle.config")
-	local success, err = pcall(config_module.validate, _config)
+	local success, err = pcall(config_module.substitute_config_values_from_env, _config)
+	if not success then
+		logger.error("Configuration substitution failed: " .. err)
+		return
+	end
+
+	-- Validate configuration after substitution
+	success, err = pcall(config_module.validate, _config)
 	if not success then
 		logger.error("Configuration validation failed: " .. err)
 		return
@@ -117,10 +124,6 @@ function M.setup(opts)
 
 	-- Set up logging
 	logger.setup(M.get_config().logging)
-
-	-- Validate API key configuration
-	local api = require("turbo-needle.api")
-	api.validate_api_key_config()
 
 	-- Setup completion triggering
 	M.setup_completion_trigger()
@@ -372,7 +375,8 @@ function M.complete()
 
 			-- Set ghost text for the completion
 			M.set_ghost_text(completion_text)
-		end)
+		end),
+		_config.api.api_key
 	)
 end
 

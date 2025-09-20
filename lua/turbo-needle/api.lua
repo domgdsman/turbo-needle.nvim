@@ -8,25 +8,7 @@ local Job = require("plenary.job")
 -- Optional user hook for customizing curl args
 M.custom_curl_args_hook = nil
 
--- Check API key configuration and warn if needed
-function M.validate_api_key_config()
-	local turbo_needle = require("turbo-needle")
-	local config = turbo_needle.get_config()
-	local api_key_name = config.api.api_key_name
 
-	if api_key_name then
-		local api_key = os.getenv(api_key_name)
-		if not api_key or api_key == "" then
-			logger.warn(
-				string.format(
-					"API key environment variable '%s' is not set or empty. " .. "Set it with: export %s='your-api-key'",
-					api_key_name,
-					api_key_name
-				)
-			)
-		end
-	end
-end
 
 -- Set custom curl args hook
 function M.set_curl_args_hook(hook_fn)
@@ -41,24 +23,14 @@ local function build_fim_prompt(code_opts)
 end
 
 -- Default curl args builder for llama.cpp completion API
-function M.build_curl_args(provider_opts, code_opts)
+function M.build_curl_args(provider_opts, code_opts, api_key)
 	local headers = {
 		["Content-Type"] = "application/json",
 	}
 
-	-- Handle optional API key from environment variable
-	if provider_opts.api_key_name then
-		local api_key = os.getenv(provider_opts.api_key_name)
-		if api_key and api_key ~= "" then
-			headers["Authorization"] = "Bearer " .. api_key
-		else
-			logger.warn(
-				string.format(
-					"API key for '%s' not found in environment. " .. "Request will be sent without authorization.",
-					provider_opts.api_key_name
-				)
-			)
-		end
+	-- Handle optional API key
+	if api_key and api_key ~= "" then
+		headers["Authorization"] = "Bearer " .. api_key
 	end
 
 	local body = {
@@ -157,7 +129,7 @@ function M.request_completion(curl_args, callback)
 end
 
 -- Main completion request function
-function M.get_completion(prompt_data, callback)
+function M.get_completion(prompt_data, callback, api_key)
 	local turbo_needle = require("turbo-needle")
 	local config = turbo_needle.get_config()
 
@@ -168,7 +140,7 @@ function M.get_completion(prompt_data, callback)
 	if custom_hook then
 		curl_args = custom_hook(config.api, prompt_data)
 	else
-		curl_args = M.build_curl_args(config.api, prompt_data)
+		curl_args = M.build_curl_args(config.api, prompt_data, api_key)
 	end
 
 	-- Make the request with retry logic

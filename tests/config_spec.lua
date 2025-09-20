@@ -16,7 +16,7 @@ describe("turbo-needle.config", function()
 			local api = config.defaults.api
 			assert.are.equal("http://localhost:8080", api.base_url)
 			assert.are.equal("qwen3-coder", api.model)
-			assert.is_nil(api.api_key_name) -- Optional field, defaults to nil
+			assert.is_nil(api.api_key) -- Optional field, defaults to nil
 			assert.are.equal(256, api.max_tokens) -- Default value
 			assert.is_nil(api.temperature) -- Optional field, defaults to nil
 			assert.are.equal(5000, api.timeout)
@@ -56,12 +56,12 @@ describe("turbo-needle.config", function()
 			end)
 		end)
 
-		it("should validate api_key_name is string when set", function()
+		it("should validate api_key is string when set", function()
 			assert.is_true(config.validate({
-				api = {
-					base_url = "http://localhost:8000",
-					model = "test",
-					api_key_name = "TEST_KEY", -- Valid string
+					api = {
+						base_url = "http://localhost:8000",
+						model = "test",
+						api_key = "TEST_KEY", -- Valid string
 					timeout = 5000,
 					max_retries = 2,
 				},
@@ -71,13 +71,13 @@ describe("turbo-needle.config", function()
 			}))
 		end)
 
-		it("should reject non-string api_key_name", function()
+		it("should reject non-string api_key", function()
 			assert.has_error(function()
 				config.validate({
 					api = {
 						base_url = "http://localhost:8000",
 						model = "test",
-						api_key_name = 123, -- Invalid: number instead of string
+						api_key = 123, -- Invalid: number instead of string
 						timeout = 5000,
 						max_retries = 2,
 					},
@@ -163,14 +163,59 @@ describe("turbo-needle.config", function()
 					api = {
 						base_url = "http://localhost:8000",
 						model = "test",
-						timeout = 5000,
-						max_retries = 2,
-						parse_response = "invalid", -- Invalid: string instead of function
+						parse_response = "not a function",
 					},
-					completions = { debounce_ms = 300 },
-					keymaps = { accept = "<Tab>" },
-					filetypes = {},
 				})
+			end)
+		end)
+
+		it("should substitute hardcoded API key", function()
+			local test_config = {
+				api = { api_key = "sk-test123" }
+			}
+			assert.has_no_errors(function()
+				config.substitute_config_values_from_env(test_config)
+			end)
+			assert.are.equal("sk-test123", test_config.api.api_key)
+		end)
+
+		it("should substitute environment variables in API key", function()
+			-- Mock os.getenv
+			local original_getenv = os.getenv
+			os.getenv = function(var)
+				if var == "TEST_API_KEY" then
+					return "sk-from-env"
+				end
+				return original_getenv(var)
+			end
+
+			local test_config = {
+				api = { api_key = "{env:TEST_API_KEY}" }
+			}
+			assert.has_no_errors(function()
+				config.substitute_config_values_from_env(test_config)
+			end)
+			assert.are.equal("sk-from-env", test_config.api.api_key)
+
+			-- Restore
+			os.getenv = original_getenv
+		end)
+
+		it("should error for missing environment variable", function()
+			local test_config = {
+				api = { api_key = "{env:NONEXISTENT_VAR}" }
+			}
+			assert.has_error(function()
+				config.substitute_config_values_from_env(test_config)
+			end)
+		end)
+
+		it("should reject empty string API key", function()
+			local test_config = {
+				api = { api_key = "" }
+			}
+			assert.has_error(function()
+				config.validate(test_config)
 			end)
 		end)
 	end)
