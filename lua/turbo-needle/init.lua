@@ -115,6 +115,9 @@ function M.setup(opts)
 		return
 	end
 
+	-- Set up logging
+	logger.setup(M.get_config().logging)
+
 	-- Validate API key configuration
 	local api = require("turbo-needle.api")
 	api.validate_api_key_config()
