@@ -363,12 +363,7 @@ function M.complete()
 			end
 
 			-- Parse the completion text from API response
-			local completion_text
-			if _config.api.parse_response then
-				completion_text = _config.api.parse_response(result)
-			else
-				completion_text = api.parse_response(result)
-			end
+			local completion_text = api.parse_response(result)
 
 			-- Cache the valid completion
 			cache_completion(ctx, completion_text)

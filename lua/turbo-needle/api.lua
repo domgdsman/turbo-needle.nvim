@@ -1,19 +1,6 @@
-local logger = require("turbo-needle.logger")
-
-local M = {}
-
--- Import plenary.job for async HTTP requests
 local Job = require("plenary.job")
 
--- Optional user hook for customizing curl args
-M.custom_curl_args_hook = nil
-
-
-
--- Set custom curl args hook
-function M.set_curl_args_hook(hook_fn)
-	M.custom_curl_args_hook = hook_fn
-end
+local M = {}
 
 -- Build FIM (Fill-in-the-Middle) prompt
 local function build_fim_prompt(code_opts)
@@ -29,7 +16,7 @@ function M.build_curl_args(provider_opts, code_opts, api_key)
 	}
 
 	-- Handle optional API key
-	if api_key and api_key ~= "" then
+	if api_key then
 		headers["Authorization"] = "Bearer " .. api_key
 	end
 
@@ -110,7 +97,7 @@ function M.request_completion(curl_args, callback)
 					callback(error_detail, nil)
 				end
 			else
-				local error_msg = "HTTP error: " .. tostring(return_val or "unknown")
+				local error_msg = "Curl error: " .. tostring(return_val or "unknown")
 
 				-- Get stderr from the job
 				local stderr = job:stderr_result()
@@ -133,36 +120,11 @@ function M.get_completion(prompt_data, callback, api_key)
 	local turbo_needle = require("turbo-needle")
 	local config = turbo_needle.get_config()
 
-	-- Use custom hook if provided (either from set_curl_args_hook or config.parse_curl_args)
-	local curl_args
-	local custom_hook = M.custom_curl_args_hook or config.api.parse_curl_args
+	-- Build curl arguments
+	local curl_args = M.build_curl_args(config.api, prompt_data, api_key)
 
-	if custom_hook then
-		curl_args = custom_hook(config.api, prompt_data)
-	else
-		curl_args = M.build_curl_args(config.api, prompt_data, api_key)
-	end
-
-	-- Make the request with retry logic
-	local attempt = 0
-	local max_retries = config.api.max_retries
-	local active_job = nil -- Track the current job for cancellation
-
-	local function attempt_request()
-		attempt = attempt + 1
-		active_job = M.request_completion(curl_args, function(err, result)
-			if err and attempt <= max_retries then
-				-- Retry on error with exponential backoff
-				local delay = 1000 * (2 ^ (attempt - 1))
-				vim.defer_fn(attempt_request, delay)
-			else
-				callback(err, result)
-			end
-		end)
-	end
-
-	attempt_request()
-	return active_job
+	-- Make the request
+	return M.request_completion(curl_args, callback)
 end
 
 -- Parse API response to extract completion text (llama.cpp format only)

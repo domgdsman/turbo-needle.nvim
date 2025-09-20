@@ -130,51 +130,6 @@ describe("turbo-needle", function()
 
 			assert.stub(logger.error).was_called()
 		end)
-
-		it("should use custom parse_response when provided", function()
-			-- Mock vim mode to be insert mode
-			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
-
-			-- Make async deterministic for test
-			local schedule_stub = stub(vim, "schedule")
-			schedule_stub.invokes(function(callback)
-				callback()
-			end)
-
-			-- Setup turbo-needle with custom parse_response
-			turbo_needle.setup({
-				api = {
-					parse_response = function(result)
-						return result.custom_field or ""
-					end,
-				},
-			})
-
-			local context = require("turbo-needle.context")
-			stub(context, "is_filetype_supported").returns(true)
-			stub(context, "get_current_context").returns({ prefix = "", suffix = "" })
-
-			local api = require("turbo-needle.api")
-			local get_completion_called = false
-			stub(api, "get_completion").invokes(function(data, callback)
-				get_completion_called = true
-				-- Simulate success with custom format
-				callback(nil, { custom_field = "custom parsed completion" })
-			end)
-
-			-- Mock set_ghost_text
-			local set_ghost_called = false
-			stub(turbo_needle, "set_ghost_text").invokes(function(text)
-				set_ghost_called = true
-				assert.are.equal("custom parsed completion", text)
-			end)
-
-			-- Call complete
-			turbo_needle.complete()
-
-			assert.is_true(get_completion_called)
-			assert.is_true(set_ghost_called)
-		end)
 	end)
 
 	describe("setup_completion_trigger", function()

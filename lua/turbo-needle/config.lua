@@ -18,15 +18,6 @@ M.defaults = {
 		top_k = nil, -- Optional: Top-k sampling parameter
 		repetition_penalty = nil, -- Optional: Repetition penalty parameter
 		timeout = 5000,
-		max_retries = 2,
-		parse_curl_args = nil, -- Optional custom curl args function
-		parse_response = nil, -- Optional custom response parser function
-		-- Example custom parser for different API formats:
-		-- parse_response = function(result)
-		--   if result.content then return result.content end
-		--   if result.choices and result.choices[1] then return result.choices[1].text or "" end
-		--   return ""
-		-- end
 	},
 	completions = {
 		debounce_ms = 600,
@@ -59,7 +50,6 @@ function M.validate(config)
 	vim.validate("api.base_url", config.api.base_url, "string")
 	vim.validate("api.model", config.api.model, "string")
 	vim.validate("api.timeout", config.api.timeout, "number")
-	vim.validate("api.max_retries", config.api.max_retries, "number")
 	vim.validate("completions.debounce_ms", config.completions.debounce_ms, "number")
 
 	-- Validate api_key is string when set and not empty
@@ -107,11 +97,6 @@ function M.validate(config)
 	-- Validate repetition_penalty is number when set
 	if config.api.repetition_penalty ~= nil then
 		vim.validate("api.repetition_penalty", config.api.repetition_penalty, "number")
-	end
-
-	-- Validate parse_response is function when set
-	if config.api.parse_response ~= nil then
-		vim.validate("api.parse_response", config.api.parse_response, "function")
 	end
 
 	-- Validate filetypes table values are booleans

@@ -20,7 +20,6 @@ describe("turbo-needle.config", function()
 			assert.are.equal(256, api.max_tokens) -- Default value
 			assert.is_nil(api.temperature) -- Optional field, defaults to nil
 			assert.are.equal(5000, api.timeout)
-			assert.are.equal(2, api.max_retries)
 		end)
 
 		it("should have default completions settings", function()
@@ -58,12 +57,11 @@ describe("turbo-needle.config", function()
 
 		it("should validate api_key is string when set", function()
 			assert.is_true(config.validate({
-					api = {
-						base_url = "http://localhost:8000",
-						model = "test",
-						api_key = "TEST_KEY", -- Valid string
+				api = {
+					base_url = "http://localhost:8000",
+					model = "test",
+					api_key = "TEST_KEY", -- Valid string
 					timeout = 5000,
-					max_retries = 2,
 				},
 				completions = { debounce_ms = 300, throttle_ms = 1000 },
 				keymaps = { accept = "<Tab>" },
@@ -79,7 +77,6 @@ describe("turbo-needle.config", function()
 						model = "test",
 						api_key = 123, -- Invalid: number instead of string
 						timeout = 5000,
-						max_retries = 2,
 					},
 					completions = { debounce_ms = 300, throttle_ms = 600 },
 					keymaps = { accept = "<Tab>" },
@@ -96,7 +93,6 @@ describe("turbo-needle.config", function()
 					max_tokens = 100, -- Valid number
 					temperature = 0.7, -- Valid number
 					timeout = 5000,
-					max_retries = 2,
 				},
 				completions = { debounce_ms = 300, throttle_ms = 600 },
 				keymaps = { accept = "<Tab>" },
@@ -112,7 +108,6 @@ describe("turbo-needle.config", function()
 						model = "test",
 						max_tokens = "invalid", -- Invalid: string instead of number
 						timeout = 5000,
-						max_retries = 2,
 					},
 					completions = { debounce_ms = 300, throttle_ms = 600 },
 					keymaps = { accept = "<Tab>" },
@@ -129,7 +124,6 @@ describe("turbo-needle.config", function()
 						model = "test",
 						temperature = "invalid", -- Invalid: string instead of number
 						timeout = 5000,
-						max_retries = 2,
 					},
 					completions = { debounce_ms = 300, throttle_ms = 600 },
 					keymaps = { accept = "<Tab>" },
@@ -138,40 +132,9 @@ describe("turbo-needle.config", function()
 			end)
 		end)
 
-		it("should validate parse_response is function when set", function()
-			assert.has_no.errors(function()
-				config.validate({
-					api = {
-						base_url = "http://localhost:8000",
-						model = "test",
-						timeout = 5000,
-						max_retries = 2,
-						parse_response = function(result)
-							return result.content or ""
-						end, -- Valid function
-					},
-					completions = { debounce_ms = 300 },
-					keymaps = { accept = "<Tab>" },
-					filetypes = {},
-				})
-			end)
-		end)
-
-		it("should reject non-function parse_response", function()
-			assert.has_error(function()
-				config.validate({
-					api = {
-						base_url = "http://localhost:8000",
-						model = "test",
-						parse_response = "not a function",
-					},
-				})
-			end)
-		end)
-
 		it("should substitute hardcoded API key", function()
 			local test_config = {
-				api = { api_key = "sk-test123" }
+				api = { api_key = "sk-test123" },
 			}
 			assert.has_no_errors(function()
 				config.substitute_config_values_from_env(test_config)
@@ -190,7 +153,7 @@ describe("turbo-needle.config", function()
 			end
 
 			local test_config = {
-				api = { api_key = "{env:TEST_API_KEY}" }
+				api = { api_key = "{env:TEST_API_KEY}" },
 			}
 			assert.has_no_errors(function()
 				config.substitute_config_values_from_env(test_config)
@@ -203,7 +166,7 @@ describe("turbo-needle.config", function()
 
 		it("should error for missing environment variable", function()
 			local test_config = {
-				api = { api_key = "{env:NONEXISTENT_VAR}" }
+				api = { api_key = "{env:NONEXISTENT_VAR}" },
 			}
 			assert.has_error(function()
 				config.substitute_config_values_from_env(test_config)
@@ -212,7 +175,7 @@ describe("turbo-needle.config", function()
 
 		it("should reject empty string API key", function()
 			local test_config = {
-				api = { api_key = "" }
+				api = { api_key = "" },
 			}
 			assert.has_error(function()
 				config.validate(test_config)

@@ -31,25 +31,6 @@ describe("turbo-needle.api", function()
 		end)
 	end)
 
-	describe("set_curl_args_hook", function()
-		it("should allow setting custom curl args hook", function()
-			local custom_hook = function(provider_opts, code_opts)
-				return {
-					url = "custom-url",
-					headers = { ["Custom"] = "header" },
-					body = { custom = "body" },
-					timeout = 1000,
-				}
-			end
-
-			api.set_curl_args_hook(custom_hook)
-			assert.are.equal(custom_hook, api.custom_curl_args_hook)
-
-			-- Clean up
-			api.custom_curl_args_hook = nil
-		end)
-	end)
-
 	describe("parse_response", function()
 		it("should parse completion text from valid OpenAI response", function()
 			local result = {
