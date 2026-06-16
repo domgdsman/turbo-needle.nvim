@@ -98,6 +98,7 @@ end
 
 -- Private config storage
 local _config = config.defaults
+local current_accept_keymap = nil
 
 -- Public getter for config
 function M.get_config()
@@ -105,22 +106,24 @@ function M.get_config()
 end
 
 function M.setup(opts)
-	_config = vim.tbl_deep_extend("force", vim.deepcopy(config.defaults), opts or {})
+	local next_config = vim.tbl_deep_extend("force", vim.deepcopy(config.defaults), opts or {})
 
 	-- Substitute environment variables in config
 	local config_module = require("turbo-needle.config")
-	local success, err = pcall(config_module.substitute_config_values_from_env, _config)
+	local success, err = pcall(config_module.substitute_config_values_from_env, next_config)
 	if not success then
 		logger.error("Configuration substitution failed: " .. err)
 		return
 	end
 
 	-- Validate configuration after substitution
-	success, err = pcall(config_module.validate, _config)
+	success, err = pcall(config_module.validate, next_config)
 	if not success then
 		logger.error("Configuration validation failed: " .. err)
 		return
 	end
+
+	_config = next_config
 
 	-- Set up logging
 	logger.setup(M.get_config().logging)
@@ -135,10 +138,16 @@ function M.setup(opts)
 end
 
 function M.setup_keymaps()
+	if current_accept_keymap then
+		pcall(vim.keymap.del, "i", current_accept_keymap)
+		current_accept_keymap = nil
+	end
+
 	if _config.keymaps.accept and _config.keymaps.accept ~= "" then
 		vim.keymap.set("i", _config.keymaps.accept, function()
 			return M.accept_completion()
 		end, { expr = true, desc = "turbo-needle: accept completion" })
+		current_accept_keymap = _config.keymaps.accept
 	end
 end
 
@@ -521,32 +530,17 @@ function M.accept_completion()
 				return
 			end
 			local sched_final
-			if #lines_copy == 1 then
-				local line_text = vim.api.nvim_get_current_line()
-				local line_len = #line_text
-				if col > line_len then
-					col = line_len
-				end
-				if col == line_len - 1 then
-					col = line_len
-				end
-				if pcall(vim.api.nvim_buf_set_text, 0, row, col, row, col, { lines_copy[1] }) then
+			local line_text = vim.api.nvim_get_current_line()
+			local line_len = #line_text
+			if col > line_len then
+				col = line_len
+			end
+
+			if pcall(vim.api.nvim_buf_set_text, 0, row, col, row, col, lines_copy) then
+				if #lines_copy == 1 then
 					sched_final = { row = row, col = col + #lines_copy[1] }
-				end
-			else
-				local line_text = vim.api.nvim_get_current_line()
-				local before = line_text:sub(1, col)
-				local after = line_text:sub(col + 1)
-				local merged_first = before .. lines_copy[1] .. after
-				local ok1 = pcall(vim.api.nvim_buf_set_lines, 0, row, row + 1, false, { merged_first })
-				if ok1 and #lines_copy > 1 then
-					local tail = {}
-					for i = 2, #lines_copy do
-						tail[#tail + 1] = lines_copy[i]
-					end
-					if pcall(vim.api.nvim_buf_set_lines, 0, row + 1, row + 1, false, tail) then
-						sched_final = { row = row + (#lines_copy - 1), col = #lines_copy[#lines_copy] }
-					end
+				else
+					sched_final = { row = row + (#lines_copy - 1), col = #lines_copy[#lines_copy] }
 				end
 			end
 			M.clear_ghost_text()

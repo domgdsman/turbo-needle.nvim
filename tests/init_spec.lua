@@ -39,6 +39,36 @@ describe("turbo-needle", function()
 			local config = turbo_needle.get_config()
 			assert.are.equal("<C-y>", config.keymaps.accept)
 		end)
+
+		it("should preserve previous configuration when setup validation fails", function()
+			turbo_needle.setup({
+				keymaps = { accept = "<C-y>" },
+			})
+
+			turbo_needle.setup({
+				api = {
+					timeout = "invalid",
+				},
+			})
+
+			local config = turbo_needle.get_config()
+			assert.are.equal("<C-y>", config.keymaps.accept)
+			assert.are.equal(5000, config.api.timeout)
+		end)
+
+		it("should replace old accept keymap on repeated setup", function()
+			turbo_needle.setup({
+				keymaps = { accept = "<C-y>" },
+			})
+			assert.is_not_nil(vim.fn.maparg("<C-y>", "i"))
+
+			turbo_needle.setup({
+				keymaps = { accept = "<C-x>" },
+			})
+
+			assert.are.equal("", vim.fn.maparg("<C-y>", "i"))
+			assert.is_not_nil(vim.fn.maparg("<C-x>", "i"))
+		end)
 	end)
 
 	describe("complete", function()
@@ -292,6 +322,24 @@ describe("turbo-needle", function()
 			-- State cleared
 			assert.is_nil(state.cached_completion)
 			assert.is_nil(state.current_extmark)
+		end)
+
+		it("should preserve suffix when accepting multi-line completion in middle of line", function()
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			local schedule_stub = stub(vim, "schedule")
+			schedule_stub.invokes(function(callback)
+				callback()
+			end)
+
+			vim.api.nvim_buf_set_lines(0, 0, -1, false, { "foobar" })
+			vim.api.nvim_win_set_cursor(0, { 1, 3 })
+
+			turbo_needle.set_ghost_text("A\nB")
+			local ret = turbo_needle.accept_completion()
+
+			assert.are.equal("", ret)
+			assert.are.same({ "fooA", "Bbar" }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+			assert.are.same({ 2, 1 }, vim.api.nvim_win_get_cursor(0))
 		end)
 	end)
 end)

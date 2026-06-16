@@ -47,6 +47,23 @@ describe("turbo-needle.config", function()
 			assert.is_true(config.validate(config.defaults))
 		end)
 
+		it("should use old-compatible vim.validate table calls", function()
+			local original_validate = vim.validate
+			local calls = 0
+			vim.validate = function(spec)
+				calls = calls + 1
+				assert.is_table(spec)
+			end
+
+			local ok, err = pcall(function()
+				config.validate(config.defaults)
+			end)
+
+			vim.validate = original_validate
+			assert.is_true(ok, err)
+			assert.is_true(calls > 0)
+		end)
+
 		it("should reject invalid configuration", function()
 			assert.has_error(function()
 				config.validate({
