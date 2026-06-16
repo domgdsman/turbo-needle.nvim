@@ -27,7 +27,7 @@ jobs:
         run: sudo luarocks install luacheck 1.2.0-1
 
       - name: Install StyLua
-        run: cargo install stylua --version 2.3.1 --locked
+        run: npm install -g @johnnymorganz/stylua-bin@2.3.1
 
       - name: Lint
         run: make lint
