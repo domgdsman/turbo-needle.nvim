@@ -1,0 +1,39 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y neovim lua5.1 liblua5.1-0-dev luarocks
+
+      - name: Install Luacheck
+        run: sudo luarocks install luacheck 1.2.0-1
+
+      - name: Install StyLua
+        run: cargo install stylua --version 2.3.1 --locked
+
+      - name: Lint
+        run: make lint
+
+      - name: Check Formatting
+        run: stylua --check lua/ tests/
+
+      - name: Test
+        run: make test
