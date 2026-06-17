@@ -92,6 +92,29 @@ async.tests.describe("turbo-needle caching and cancellation", function()
 	)
 
 	async.tests.it(
+		"should cache postprocessed completions instead of raw API text",
+		async.void(function()
+			local context = setup_caching_mocks()
+			stub(context, "get_current_context").returns({ prefix = "print(", suffix = ")" })
+
+			local api = require("turbo-needle.api")
+			local api_stub = setup_api_mocks(api, "'cached')")
+			local ghost_stub = setup_ghost_text_spy()
+
+			local async_complete = async.wrap(turbo_needle.complete, 1)
+			async_complete()
+			async.util.sleep(10)
+			async_complete()
+			async.util.sleep(10)
+
+			assert.stub(api_stub).was_called(1)
+			assert.stub(ghost_stub).was_called(2)
+			assert.stub(ghost_stub).was_called_with("'cached'")
+			assert.stub(ghost_stub).was_not_called_with("'cached')")
+		end)
+	)
+
+	async.tests.it(
 		"should cancel earlier completion responses when a newer request is made",
 		async.void(function()
 			-- Setup mocks

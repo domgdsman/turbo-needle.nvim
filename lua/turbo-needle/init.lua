@@ -5,6 +5,7 @@ local ghost = require("turbo-needle.ghost")
 local keymaps = require("turbo-needle.keymaps")
 local lifecycle = require("turbo-needle.lifecycle")
 local logger = require("turbo-needle.logger")
+local postprocess = require("turbo-needle.postprocess")
 local state_store = require("turbo-needle.state")
 local version = require("turbo-needle.version")
 
@@ -155,7 +156,16 @@ function M.complete()
 			end
 
 			-- Parse the completion text from API response
-			local completion_text = api.parse_response(result, _config.api)
+			local raw_completion_text = api.parse_response(result, _config.api)
+			local completion_text = postprocess.apply(raw_completion_text, {
+				config = _config.postprocess,
+				api = _config.api,
+				prefix = ctx.prefix,
+				suffix = ctx.suffix,
+			})
+			if not completion_text then
+				return
+			end
 
 			-- Cache the valid completion
 			completion_cache:set(cache_ctx, completion_text)
