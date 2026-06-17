@@ -23,7 +23,6 @@
         let
           pkgs = pkgsFor system;
           checkPackages = with pkgs; [
-            git
             neovim
             stylua
             lua51Packages.luacheck
