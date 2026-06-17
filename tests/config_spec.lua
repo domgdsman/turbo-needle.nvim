@@ -8,6 +8,7 @@ describe("turbo-needle.config", function()
 			assert.is_not_nil(config.defaults)
 			assert.is_table(config.defaults.api)
 			assert.is_table(config.defaults.completions)
+			assert.is_table(config.defaults.postprocess)
 			assert.is_table(config.defaults.keymaps)
 			assert.is_table(config.defaults.filetypes)
 		end)
@@ -34,6 +35,16 @@ describe("turbo-needle.config", function()
 		it("should have default completions settings", function()
 			local completions = config.defaults.completions
 			assert.are.equal(600, completions.debounce_ms)
+		end)
+
+		it("should have default postprocess settings", function()
+			local postprocess = config.defaults.postprocess
+			assert.is_true(postprocess.enabled)
+			assert.is_true(postprocess.trim_suffix_overlap)
+			assert.is_true(postprocess.trim_prefix_overlap)
+			assert.is_true(postprocess.strip_stop_tokens)
+			assert.is_nil(postprocess.max_lines)
+			assert.is_nil(postprocess.max_chars)
 		end)
 
 		it("should have default keymaps", function()
@@ -124,6 +135,25 @@ describe("turbo-needle.config", function()
 				keymaps = { accept = "<Tab>" },
 				filetypes = {},
 			}))
+		end)
+
+		it("should validate postprocess settings", function()
+			local valid = vim.deepcopy(config.defaults)
+			valid.postprocess.max_lines = 3
+			valid.postprocess.max_chars = 120
+			assert.is_true(config.validate(valid))
+
+			local invalid_enabled = vim.deepcopy(config.defaults)
+			invalid_enabled.postprocess.enabled = "yes"
+			assert.has_error(function()
+				config.validate(invalid_enabled)
+			end)
+
+			local invalid_cap = vim.deepcopy(config.defaults)
+			invalid_cap.postprocess.max_lines = 0
+			assert.has_error(function()
+				config.validate(invalid_cap)
+			end)
 		end)
 
 		it("should validate stream when set", function()

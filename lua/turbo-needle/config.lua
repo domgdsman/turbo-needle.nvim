@@ -37,6 +37,14 @@ M.defaults = {
 	completions = {
 		debounce_ms = 600,
 	},
+	postprocess = {
+		enabled = true,
+		trim_suffix_overlap = true,
+		trim_prefix_overlap = true,
+		strip_stop_tokens = true,
+		max_lines = nil,
+		max_chars = nil,
+	},
 	keymaps = {
 		accept = "<Tab>",
 	},
@@ -56,6 +64,9 @@ function M.validate(config)
 	validate("config", config, "table")
 	validate("config.api", config.api, "table")
 	validate("config.completions", config.completions, "table")
+	if config.postprocess then
+		validate("config.postprocess", config.postprocess, "table")
+	end
 	validate("config.keymaps", config.keymaps, "table")
 	validate("config.filetypes", config.filetypes, "table")
 	if config.logging then
@@ -99,6 +110,23 @@ function M.validate(config)
 	validate("api.extra_body", extra_body, "table")
 	validate("api.headers", headers, "table")
 	validate("completions.debounce_ms", config.completions.debounce_ms, "number")
+	local postprocess = config.postprocess or M.defaults.postprocess
+	validate("postprocess.enabled", postprocess.enabled, "boolean")
+	validate("postprocess.trim_suffix_overlap", postprocess.trim_suffix_overlap, "boolean")
+	validate("postprocess.trim_prefix_overlap", postprocess.trim_prefix_overlap, "boolean")
+	validate("postprocess.strip_stop_tokens", postprocess.strip_stop_tokens, "boolean")
+	if postprocess.max_lines ~= nil then
+		validate("postprocess.max_lines", postprocess.max_lines, "number")
+		if postprocess.max_lines < 1 then
+			error("postprocess.max_lines must be greater than 0", 0)
+		end
+	end
+	if postprocess.max_chars ~= nil then
+		validate("postprocess.max_chars", postprocess.max_chars, "number")
+		if postprocess.max_chars < 1 then
+			error("postprocess.max_chars must be greater than 0", 0)
+		end
+	end
 
 	local valid_providers = {
 		openai_compatible = true,

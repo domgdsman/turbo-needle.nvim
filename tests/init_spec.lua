@@ -26,8 +26,8 @@ describe("turbo-needle", function()
 
 	describe("setup", function()
 		it("should expose plugin version metadata", function()
-			assert.are.equal("0.0.20", turbo_needle.version)
-			assert.are.equal("0.0.20", turbo_needle._VERSION)
+			assert.are.equal("0.0.21", turbo_needle.version)
+			assert.are.equal("0.0.21", turbo_needle._VERSION)
 		end)
 
 		it("should setup with default configuration", function()
@@ -119,6 +119,25 @@ describe("turbo-needle", function()
 
 			assert.is_true(get_completion_called)
 			assert.is_true(set_ghost_called)
+		end)
+
+		it("should not cache or display whitespace-only completions", function()
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+
+			local context = require("turbo-needle.context")
+			stub(context, "is_filetype_supported").returns(true)
+			stub(context, "get_current_context").returns({ prefix = "", suffix = "" })
+
+			local api = require("turbo-needle.api")
+			stub(api, "get_completion").invokes(function(_, callback)
+				callback(nil, { choices = { { text = " \n\t" } } })
+			end)
+
+			local set_ghost_stub = stub(turbo_needle, "set_ghost_text")
+
+			turbo_needle.complete()
+
+			assert.stub(set_ghost_stub).was_not_called()
 		end)
 
 		it("should not call api when filetype not supported", function()

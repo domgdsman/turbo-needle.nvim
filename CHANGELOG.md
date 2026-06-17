@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.21
+
+- Add completion postprocessing for whitespace rejection, sentinel cleanup, overlap trimming, and optional length caps.
+- Cache and display postprocessed completion text instead of raw API output.
+- Add validated `postprocess` configuration defaults and unit coverage for cleanup behavior.
+
 ## v0.0.20
 
 - Add model-specific autocomplete template selection with built-in FIM formats and model-name matching for common code completion model families.
