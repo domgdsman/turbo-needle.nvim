@@ -18,6 +18,9 @@ describe("turbo-needle.config", function()
 			assert.are.equal("qwen3-coder", api.model)
 			assert.are.equal("openai_compatible", api.provider)
 			assert.are.equal("fim_prompt", api.mode)
+			assert.is_nil(api.template)
+			assert.is_nil(api.custom_template)
+			assert.are.equal("auto", api.stop)
 			assert.is_nil(api.path)
 			assert.is_nil(api.api_key) -- Optional field, defaults to nil
 			assert.are.equal(256, api.max_tokens) -- Default value
@@ -142,10 +145,24 @@ describe("turbo-needle.config", function()
 			valid.api.provider = "litellm"
 			valid.api.mode = "fim_suffix"
 			valid.api.path = "/v1/fim/completions"
+			valid.api.template = "codestral"
+			valid.api.stop = { "</s>", "[SUFFIX]" }
 			valid.api.headers = { ["X-Test"] = "enabled" }
 			valid.api.extra_body = { stop = { "\n\n" } }
 
 			assert.is_true(config.validate(valid))
+		end)
+
+		it("should validate custom templates", function()
+			local valid = vim.deepcopy(config.defaults)
+			valid.api.custom_template = "a {prefix} b {suffix}"
+			assert.is_true(config.validate(valid))
+
+			local invalid = vim.deepcopy(config.defaults)
+			invalid.api.custom_template = "missing suffix {prefix}"
+			assert.has_error(function()
+				config.validate(invalid)
+			end)
 		end)
 
 		it("should reject invalid provider and mode", function()
@@ -159,6 +176,20 @@ describe("turbo-needle.config", function()
 			invalid_mode.api.mode = "bogus"
 			assert.has_error(function()
 				config.validate(invalid_mode)
+			end)
+		end)
+
+		it("should reject invalid template and stop config", function()
+			local invalid_template = vim.deepcopy(config.defaults)
+			invalid_template.api.template = "bogus"
+			assert.has_error(function()
+				config.validate(invalid_template)
+			end)
+
+			local invalid_stop = vim.deepcopy(config.defaults)
+			invalid_stop.api.stop = { "\n\n", 12 }
+			assert.has_error(function()
+				config.validate(invalid_stop)
 			end)
 		end)
 

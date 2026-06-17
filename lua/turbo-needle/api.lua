@@ -1,4 +1,5 @@
 local M = {}
+local templates = require("turbo-needle.templates")
 
 local default_paths = {
 	fim_prompt = "/v1/completions",
@@ -6,13 +7,6 @@ local default_paths = {
 	llamacpp_infill = "/infill",
 	chat_fallback = "/v1/chat/completions",
 }
-
--- Build FIM (Fill-in-the-Middle) prompt
-local function build_fim_prompt(code_opts)
-	local prefix = code_opts.prefix or ""
-	local suffix = code_opts.suffix or ""
-	return string.format("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>", prefix, suffix)
-end
 
 local function resolve_path(provider_opts)
 	if provider_opts.path then
@@ -56,17 +50,27 @@ local function add_sampling(provider_opts, body)
 	return body
 end
 
+local function add_stop(provider_opts, body)
+	local template = templates.resolve(provider_opts)
+	local stop = templates.merge_stop(template, provider_opts.stop)
+	if stop then
+		body.stop = stop
+	end
+	return body
+end
+
 local function merge_extra_body(provider_opts, body)
 	return vim.tbl_deep_extend("force", body, provider_opts.extra_body or {})
 end
 
 local function build_fim_prompt_body(provider_opts, code_opts, stream)
+	local template = templates.resolve(provider_opts)
 	local body = {
 		model = provider_opts.model,
-		prompt = build_fim_prompt(code_opts),
+		prompt = templates.render(template, code_opts),
 		stream = stream,
 	}
-	return merge_extra_body(provider_opts, add_sampling(provider_opts, body))
+	return merge_extra_body(provider_opts, add_stop(provider_opts, add_sampling(provider_opts, body)))
 end
 
 local function build_fim_suffix_body(provider_opts, code_opts, stream)
@@ -76,7 +80,7 @@ local function build_fim_suffix_body(provider_opts, code_opts, stream)
 		suffix = code_opts.suffix or "",
 		stream = stream,
 	}
-	return merge_extra_body(provider_opts, add_sampling(provider_opts, body))
+	return merge_extra_body(provider_opts, add_stop(provider_opts, add_sampling(provider_opts, body)))
 end
 
 local function build_llamacpp_infill_body(provider_opts, code_opts, stream)
@@ -88,27 +92,16 @@ local function build_llamacpp_infill_body(provider_opts, code_opts, stream)
 	if provider_opts.model then
 		body.model = provider_opts.model
 	end
-	return merge_extra_body(provider_opts, add_sampling(provider_opts, body))
+	return merge_extra_body(provider_opts, add_stop(provider_opts, add_sampling(provider_opts, body)))
 end
 
 local function build_chat_fallback_body(provider_opts, code_opts, stream)
-	local prefix = code_opts.prefix or ""
-	local suffix = code_opts.suffix or ""
 	local body = {
 		model = provider_opts.model,
-		messages = {
-			{
-				role = "system",
-				content = "Complete the user's code at the cursor. Return only the inserted code.",
-			},
-			{
-				role = "user",
-				content = "Prefix:\n" .. prefix .. "\n\nSuffix:\n" .. suffix,
-			},
-		},
+		messages = templates.chat_messages(code_opts),
 		stream = stream,
 	}
-	return merge_extra_body(provider_opts, add_sampling(provider_opts, body))
+	return merge_extra_body(provider_opts, add_stop(provider_opts, add_sampling(provider_opts, body)))
 end
 
 function M.build_request_body(provider_opts, code_opts)
@@ -166,6 +159,9 @@ function M.cache_fingerprint(provider_opts)
 		provider_opts.provider or "",
 		provider_opts.model or "",
 		provider_opts.mode or "",
+		provider_opts.template or "",
+		provider_opts.custom_template or "",
+		stable_encode(provider_opts.stop or "auto"),
 		resolve_path(provider_opts),
 		tostring(provider_opts.stream ~= false),
 		stable_encode(provider_opts.extra_body or {}),
