@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.0.16
+
+- Extract ghost text rendering, clearing, and acceptance into `turbo-needle.ghost`.
+- Extract autocmd, debounce, and buffer lifecycle wiring into `turbo-needle.lifecycle`.
+- Extract accept keymap replacement into `turbo-needle.keymaps`.
+- Keep public runtime wrappers in `init.lua` for compatibility.
+- Quiet expected stale extmark cleanup errors.
+
 ## v0.0.15
 
 - Extract core runtime primitives for completion cache, buffer state, cleanup, and edit insertion.
