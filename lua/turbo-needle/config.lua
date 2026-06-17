@@ -19,6 +19,9 @@ M.defaults = {
 		model = "qwen3-coder",
 		provider = "openai_compatible",
 		mode = "fim_prompt",
+		template = nil,
+		custom_template = nil,
+		stop = "auto",
 		path = nil,
 		api_key = nil, -- API key or env var reference like "{env:VAR_NAME}" (optional)
 		max_tokens = 256, -- Maximum tokens to generate
@@ -71,6 +74,25 @@ function M.validate(config)
 	end
 	if config.api.path ~= nil then
 		validate("api.path", config.api.path, "string")
+	end
+	if config.api.template ~= nil then
+		validate("api.template", config.api.template, "string")
+		require("turbo-needle.templates").resolve_name(config.api)
+	end
+	if config.api.custom_template ~= nil then
+		validate("api.custom_template", config.api.custom_template, "string")
+		require("turbo-needle.templates").validate_custom_template(config.api.custom_template)
+	end
+	if config.api.stop ~= nil then
+		local stop_type = type(config.api.stop)
+		if stop_type ~= "string" and stop_type ~= "table" then
+			error("api.stop must be a string, table, or nil", 0)
+		end
+		if stop_type == "table" then
+			for index, value in ipairs(config.api.stop) do
+				validate("api.stop." .. tostring(index), value, "string")
+			end
+		end
 	end
 	local extra_body = config.api.extra_body or {}
 	local headers = config.api.headers or {}

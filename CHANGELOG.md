@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.20
+
+- Add model-specific autocomplete template selection with built-in FIM formats and model-name matching for common code completion model families.
+- Add `api.template`, `api.custom_template`, and `api.stop` configuration for explicit template and stop-token control.
+- Include template stop tokens in request bodies and merge them with user stop tokens without duplicates.
+- Document autocomplete template configuration and add unit coverage for rendering, matching, validation, and stop-token merging.
+
 ## v0.0.19
 
 - Add provider and request-mode API configuration for OpenAI-compatible FIM prompts, suffix-aware FIM, llama.cpp infill, LiteLLM path overrides, and chat fallback requests.

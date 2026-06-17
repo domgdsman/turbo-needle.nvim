@@ -33,6 +33,7 @@ describe("turbo-needle.api", function()
 			assert.is_true(result.stream)
 			assert.are.equal("http://localhost:8000/v1/completions", result.url)
 			assert.is_nil(result.body.suffix)
+			assert.are.same({ "<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>", "<|endoftext|>" }, result.body.stop)
 		end)
 
 		it("should disable streaming mode when explicitly disabled", function()
@@ -63,6 +64,7 @@ describe("turbo-needle.api", function()
 			assert.are.equal("local a = ", result.body.input_prefix)
 			assert.are.equal("\nprint(a)", result.body.input_suffix)
 			assert.is_nil(result.body.prompt)
+			assert.are.same({ "<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>", "<|endoftext|>" }, result.body.stop)
 		end)
 
 		it("should allow LiteLLM FIM path overrides with suffix-aware body", function()
@@ -80,6 +82,31 @@ describe("turbo-needle.api", function()
 			assert.are.equal("foo(", result.body.prompt)
 			assert.are.equal(")", result.body.suffix)
 			assert.are.same({ "<|end|>" }, result.body.stop)
+		end)
+
+		it("uses selected templates for FIM prompt requests", function()
+			local result = api.build_curl_args({
+				base_url = "http://localhost:8000",
+				model = "qwen3-coder",
+				template = "codellama",
+				timeout = 5000,
+			}, { prefix = "foo", suffix = "bar" }, nil)
+
+			assert.are.equal("<PRE> foo <SUF>bar <MID>", result.body.prompt)
+			assert.are.same({ "<PRE>", "<SUF>", "<MID>", "</s>" }, result.body.stop)
+		end)
+
+		it("renders custom templates and merges explicit stop tokens", function()
+			local result = api.build_curl_args({
+				base_url = "http://localhost:8000",
+				model = "qwen3-coder",
+				custom_template = "prefix:{prefix}\nsuffix:{suffix}",
+				stop = { "<|fim_middle|>", "\n\n" },
+				timeout = 5000,
+			}, { prefix = "foo", suffix = "bar" }, nil)
+
+			assert.are.equal("prefix:foo\nsuffix:bar", result.body.prompt)
+			assert.are.same({ "<|fim_middle|>", "\n\n" }, result.body.stop)
 		end)
 
 		it("should build chat fallback request bodies", function()

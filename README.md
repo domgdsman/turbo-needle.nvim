@@ -15,6 +15,9 @@ AI code completions for Neovim.
         model = "qwen3-coder:30b-a3b-instruct-gguf",
         provider = "openai_compatible",
         mode = "fim_prompt",
+        -- template = "qwen_coder",
+        -- custom_template = "{prefix}<cursor>{suffix}",
+        -- stop = "auto",
         -- path = "/v1/fim/completions",
         -- stream = false,
         -- extra_body = {},
@@ -36,3 +39,9 @@ AI code completions for Neovim.
   end,
 }
 ```
+
+## Autocomplete Templates
+
+`api.template` selects the FIM prompt format used for `fim_prompt` requests. When it is unset, turbo-needle picks a default from `api.model`. Built-in templates include `qwen_coder`, `stable_code`, `starcoder`, `codellama`, `codestral`, `deepseek_coder`, `codegemma`, `generic_fim`, and `hole_filler_chat`.
+
+Use `api.custom_template` for a literal prompt template. Custom templates must include `{prefix}` and `{suffix}` placeholders. `api.stop` defaults to `"auto"`, which sends stop tokens from the selected template. Set it to a string or list to add explicit stop tokens; duplicates are removed deterministically.
