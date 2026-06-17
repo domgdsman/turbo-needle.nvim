@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.23
+
+- Keep visible ghost completions synchronized while typing matching text.
+- Accept only the remaining synchronized completion suffix at the current cursor.
+- Resume normal debounce and request behavior when typed text no longer matches the suggestion.
+
 ## v0.0.22
 
 - Add structured completion postprocess classification for rejected inline completions.

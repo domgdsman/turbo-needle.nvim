@@ -10,7 +10,9 @@ function M.get(states, bufnr)
 			active_job = nil,
 			request_counter = 0,
 			cached_completion = nil,
+			original_completion = nil,
 			cursor_position = nil,
+			original_cursor_position = nil,
 		}
 	end
 	return states[bufnr]
