@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.17
+
+- Remove duplicate `max_tokens` and `temperature` validation paths from configuration validation.
+- Add focused module-level coverage for extracted state, cleanup, cache, edit, ghost, and keymap primitives.
+- Harden primitive behavior tests around cache TTL/LRU eviction, cleanup idempotency, insertion cursor rules, and keymap replacement.
+
 ## v0.0.16
 
 - Extract ghost text rendering, clearing, and acceptance into `turbo-needle.ghost`.
