@@ -17,6 +17,9 @@ M.defaults = {
 	api = {
 		base_url = "http://localhost:8080",
 		model = "qwen3-coder",
+		provider = "openai_compatible",
+		mode = "fim_prompt",
+		path = nil,
 		api_key = nil, -- API key or env var reference like "{env:VAR_NAME}" (optional)
 		max_tokens = 256, -- Maximum tokens to generate
 		temperature = nil, -- Optional: Sampling temperature (0.0 to 2.0)
@@ -24,6 +27,8 @@ M.defaults = {
 		top_k = nil, -- Optional: Top-k sampling parameter
 		repetition_penalty = nil, -- Optional: Repetition penalty parameter
 		stream = true, -- Use curl's streaming response path unless explicitly disabled
+		extra_body = {},
+		headers = {},
 		timeout = 5000,
 	},
 	completions = {
@@ -57,10 +62,46 @@ function M.validate(config)
 	validate("api.base_url", config.api.base_url, "string")
 	validate("api.model", config.api.model, "string")
 	validate("api.timeout", config.api.timeout, "number")
+	local provider = config.api.provider or M.defaults.api.provider
+	local mode = config.api.mode or M.defaults.api.mode
+	validate("api.provider", provider, "string")
+	validate("api.mode", mode, "string")
 	if config.api.stream ~= nil then
 		validate("api.stream", config.api.stream, "boolean")
 	end
+	if config.api.path ~= nil then
+		validate("api.path", config.api.path, "string")
+	end
+	local extra_body = config.api.extra_body or {}
+	local headers = config.api.headers or {}
+	validate("api.extra_body", extra_body, "table")
+	validate("api.headers", headers, "table")
 	validate("completions.debounce_ms", config.completions.debounce_ms, "number")
+
+	local valid_providers = {
+		openai_compatible = true,
+		vllm = true,
+		llamacpp = true,
+		litellm = true,
+		chat = true,
+	}
+	if not valid_providers[provider] then
+		error("api.provider must be one of: openai_compatible, vllm, llamacpp, litellm, chat", 0)
+	end
+
+	local valid_modes = {
+		fim_prompt = true,
+		fim_suffix = true,
+		llamacpp_infill = true,
+		chat_fallback = true,
+	}
+	if not valid_modes[mode] then
+		error("api.mode must be one of: fim_prompt, fim_suffix, llamacpp_infill, chat_fallback", 0)
+	end
+
+	for header, value in pairs(headers) do
+		validate("api.headers." .. tostring(header), value, "string")
+	end
 
 	-- Validate api_key is string when set and not empty
 	if config.api.api_key ~= nil then

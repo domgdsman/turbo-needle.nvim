@@ -114,9 +114,12 @@ function M.complete()
 	local ctx = context.get_current_context()
 	local api = require("turbo-needle.api")
 	local state = get_buf_state()
+	local cache_ctx = vim.tbl_extend("force", ctx, {
+		cache_fingerprint = api.cache_fingerprint(_config.api),
+	})
 
 	-- Check cache first
-	local cached_completion = completion_cache:get(ctx)
+	local cached_completion = completion_cache:get(cache_ctx)
 	if cached_completion then
 		M.set_ghost_text(cached_completion)
 		return
@@ -152,10 +155,10 @@ function M.complete()
 			end
 
 			-- Parse the completion text from API response
-			local completion_text = api.parse_response(result)
+			local completion_text = api.parse_response(result, _config.api)
 
 			-- Cache the valid completion
-			completion_cache:set(ctx, completion_text)
+			completion_cache:set(cache_ctx, completion_text)
 
 			-- Set ghost text for the completion
 			M.set_ghost_text(completion_text)

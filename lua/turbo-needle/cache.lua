@@ -6,7 +6,11 @@ Cache.__index = Cache
 local function get_cache_key(ctx)
 	local prefix = ctx.prefix or ""
 	local key_prefix = prefix:sub(-100)
-	return key_prefix .. "|" .. (ctx.suffix or ""):sub(1, 50)
+	return table.concat({
+		ctx.cache_fingerprint or "",
+		key_prefix,
+		(ctx.suffix or ""):sub(1, 50),
+	}, "|")
 end
 
 function M.new(opts)

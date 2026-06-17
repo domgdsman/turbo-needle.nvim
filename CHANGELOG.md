@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.19
+
+- Add provider and request-mode API configuration for OpenAI-compatible FIM prompts, suffix-aware FIM, llama.cpp infill, LiteLLM path overrides, and chat fallback requests.
+- Add mode-specific request body builders and response parsing.
+- Include API request-shape fingerprints in completion cache keys to avoid stale completions after provider, model, mode, path, stream, extra body, or header changes.
+- Document the optional provider/mode API shape.
+
 ## v0.0.18
 
 - Add a curl-backed transport facade for completion requests.
