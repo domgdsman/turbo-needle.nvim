@@ -19,7 +19,7 @@ describe("turbo-needle.config", function()
 			assert.is_nil(api.api_key) -- Optional field, defaults to nil
 			assert.are.equal(256, api.max_tokens) -- Default value
 			assert.is_nil(api.temperature) -- Optional field, defaults to nil
-			assert.is_false(api.stream)
+			assert.is_true(api.stream)
 			assert.are.equal(5000, api.timeout)
 		end)
 

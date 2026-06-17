@@ -4,7 +4,7 @@
 
 - Add a curl-backed transport facade for completion requests.
 - Add conservative streaming support for Server-Sent Events `data:` chunks with OpenAI-compatible text and delta decoding.
-- Add validated `api.stream` configuration, defaulting to `false`.
+- Add validated `api.stream` configuration, defaulting to streaming unless explicitly disabled.
 - Keep existing non-streaming completion behavior and cancellation compatibility.
 
 ## v0.0.17

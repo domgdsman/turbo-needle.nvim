@@ -23,7 +23,7 @@ M.defaults = {
 		top_p = nil, -- Optional: Top-p sampling parameter
 		top_k = nil, -- Optional: Top-k sampling parameter
 		repetition_penalty = nil, -- Optional: Repetition penalty parameter
-		stream = false, -- Use curl's streaming response path
+		stream = true, -- Use curl's streaming response path unless explicitly disabled
 		timeout = 5000,
 	},
 	completions = {

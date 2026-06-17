@@ -9,6 +9,7 @@ end
 
 -- Default request builder for llama.cpp completion API
 function M.build_curl_args(provider_opts, code_opts, api_key)
+	local stream = provider_opts.stream ~= false
 	local headers = {
 		["Content-Type"] = "application/json",
 	}
@@ -22,7 +23,7 @@ function M.build_curl_args(provider_opts, code_opts, api_key)
 		model = provider_opts.model,
 		prompt = build_fim_prompt(code_opts),
 		max_tokens = provider_opts.max_tokens or 256,
-		stream = provider_opts.stream or false,
+		stream = stream,
 	}
 
 	-- Add optional parameters if they are set
@@ -44,7 +45,7 @@ function M.build_curl_args(provider_opts, code_opts, api_key)
 		headers = headers,
 		body = body,
 		timeout = provider_opts.timeout,
-		stream = provider_opts.stream or false,
+		stream = stream,
 	}
 end
 
