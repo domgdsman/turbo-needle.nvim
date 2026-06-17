@@ -44,6 +44,19 @@ describe("turbo-needle.api", function()
 			assert.are.equal("completed code", text)
 		end)
 
+		it("should preserve literal escape sequences from decoded JSON text", function()
+			local result = {
+				choices = {
+					{
+						text = [[literal \n text]],
+					},
+				},
+			}
+
+			local text = api.parse_response(result)
+			assert.are.equal([[literal \n text]], text)
+		end)
+
 		it("should return empty string for invalid response", function()
 			local text = api.parse_response(nil)
 			assert.are.equal("", text)

@@ -144,23 +144,6 @@ function M.parse_response(result)
 		return ""
 	end
 
-	-- Handle escape sequences in the completion text
-	if completion_text ~= "" then
-		-- Process escape sequences safely
-		local success, processed = pcall(function()
-			local text = completion_text
-			text = text:gsub("\\n", "\n")
-			text = text:gsub("\\t", "\t")
-			text = text:gsub('\\"', '"')
-			text = text:gsub("\\\\", "\\")
-			return text
-		end)
-
-		if success then
-			completion_text = processed
-		end
-	end
-
 	return completion_text
 end
 
