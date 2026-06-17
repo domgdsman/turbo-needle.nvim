@@ -19,7 +19,7 @@ AI code completions for Neovim.
         -- custom_template = "{prefix}<cursor>{suffix}",
         -- stop = "auto",
         -- path = "/v1/fim/completions",
-        -- stream = false,
+        -- stream = true, -- default; set false for non-streaming providers
         -- extra_body = {},
         -- headers = {},
       },
@@ -47,6 +47,14 @@ AI code completions for Neovim.
   end,
 }
 ```
+
+## Provider Modes
+
+Completion requests stream by default. Set `api.stream = false` if your provider does not return Server-Sent Events chunks or if you prefer the older full-response request path.
+
+The default `openai_compatible` + `fim_prompt` mode sends a FIM-rendered `prompt` to `/v1/completions`, which works for vLLM-style OpenAI-compatible completion servers that do not support OpenAI's separate `suffix` parameter. Use `provider = "llamacpp"` with `mode = "llamacpp_infill"` for llama.cpp's native `/infill` endpoint. Use `provider = "litellm"` with `mode = "fim_suffix"` and `path = "/v1/fim/completions"` for LiteLLM-compatible FIM routes that expect `prompt` plus `suffix`. `provider = "chat"` with `mode = "chat_fallback"` is available for chat/instruct models, but FIM-trained models remain the recommended autocomplete path.
+
+Additional request fields can be passed through `api.extra_body`, and provider-specific headers can be added with `api.headers`.
 
 ## Autocomplete Templates
 

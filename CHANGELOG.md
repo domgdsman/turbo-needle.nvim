@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Document streaming as the default completion request path and clarify how to disable it for non-streaming providers.
+- Expand provider-mode documentation for OpenAI-compatible FIM prompts, llama.cpp infill, LiteLLM FIM path overrides, and chat fallback requests.
+
 ## v0.0.21
 
 - Add completion postprocessing for whitespace rejection, sentinel cleanup, overlap trimming, and optional length caps.
