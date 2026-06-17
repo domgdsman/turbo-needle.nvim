@@ -1,7 +1,14 @@
 local config = require("turbo-needle.config")
+local cache = require("turbo-needle.cache")
+local cleanup = require("turbo-needle.cleanup")
+local edit = require("turbo-needle.edit")
 local logger = require("turbo-needle.logger")
+local state_store = require("turbo-needle.state")
+local version = require("turbo-needle.version")
 
 local M = {}
+M.version = version.version
+M._VERSION = version.version
 
 local TurboNeedle = {
 	augroup = "turbo-needle",
@@ -11,89 +18,12 @@ local TurboNeedle = {
 local enabled = true
 
 -- Completion cache
-local completion_cache = {
-	entries = {},
-	max_size = 50,
-	ttl_ms = 2000, -- 2 seconds
-}
+local completion_cache = cache.new({ max_size = 50, ttl_ms = 2000 })
 
 -- Buffer-local state
+M._buf_states = {}
 local function get_buf_state()
-	local bufnr = vim.api.nvim_get_current_buf()
-	if not M._buf_states then
-		M._buf_states = {}
-	end
-	if not M._buf_states[bufnr] then
-		M._buf_states[bufnr] = {
-			debounce_timer = nil,
-			current_extmark = nil,
-			active_request_id = nil, -- Track active API request ID
-			active_job = nil, -- Track active plenary.job for cancellation
-			request_counter = 0, -- Counter for generating unique request IDs
-			cached_completion = nil, -- Cache original completion text
-			cursor_position = nil, -- Store cursor position when setting ghost text
-		}
-	end
-	return M._buf_states[bufnr]
-end
-
--- Cache management functions
-local function get_cache_key(ctx)
-	-- Create a hash of the prefix (last 100 chars to avoid overly long keys)
-	local prefix = ctx.prefix or ""
-	local key_prefix = prefix:sub(-100)
-	-- Use simple string concatenation instead of sha256 for compatibility
-	return key_prefix .. "|" .. (ctx.suffix or ""):sub(1, 50)
-end
-
-local function get_cached_completion(ctx)
-	local key = get_cache_key(ctx)
-	local entry = completion_cache.entries[key]
-
-	if entry then
-		local current_time = vim.loop.now()
-		if (current_time - entry.timestamp) < completion_cache.ttl_ms then
-			-- Update access time for LRU
-			entry.last_access = current_time
-			return entry.completion
-		else
-			-- Remove expired entry
-			completion_cache.entries[key] = nil
-		end
-	end
-
-	return nil
-end
-
-local function cache_completion(ctx, completion)
-	local key = get_cache_key(ctx)
-	local current_time = vim.loop.now()
-
-	-- LRU cache management
-	local cache_size = 0
-	local oldest_key = nil
-	local oldest_time = current_time
-
-	for k, v in pairs(completion_cache.entries) do
-		cache_size = cache_size + 1
-		-- Find oldest accessed entry
-		local access_time = v.last_access or v.timestamp
-		if access_time < oldest_time then
-			oldest_time = access_time
-			oldest_key = k
-		end
-	end
-
-	-- Remove oldest entry if cache is full
-	if cache_size >= completion_cache.max_size and oldest_key then
-		completion_cache.entries[oldest_key] = nil
-	end
-
-	completion_cache.entries[key] = {
-		completion = completion,
-		timestamp = current_time,
-		last_access = current_time,
-	}
+	return state_store.get(M._buf_states)
 end
 
 -- Private config storage
@@ -163,24 +93,12 @@ function M.setup_completion_trigger()
 		-- Clear existing ghost text
 		M.clear_ghost_text()
 
-		-- Cancel existing timer
 		if state.debounce_timer then
-			if type(state.debounce_timer) == "userdata" then
-				-- It's a uv timer, stop it properly
-				state.debounce_timer:stop()
-				state.debounce_timer:close()
-			else
-				-- Legacy: it might be a vim.defer_fn handle (number)
-				pcall(function()
-					vim.fn.timer_stop(state.debounce_timer)
-				end)
-			end
+			cleanup.stop_timer(state.debounce_timer)
 			state.debounce_timer = nil
 		end
 
-		-- Cancel any active API request by incrementing the request counter
-		state.request_counter = state.request_counter + 1
-		state.active_request_id = nil
+		cleanup.invalidate_request(state)
 
 		-- Create new timer using vim.loop
 		local timer = vim.loop.new_timer()
@@ -195,8 +113,7 @@ function M.setup_completion_trigger()
 					M.complete()
 					state.debounce_timer = nil
 					if timer then
-						timer:stop()
-						timer:close()
+						cleanup.stop_timer(timer)
 					end
 				end
 			end)
@@ -210,28 +127,7 @@ function M.setup_completion_trigger()
 		group = TurboNeedle.augroup,
 		callback = function()
 			local state = get_buf_state()
-			if state.debounce_timer then
-				if type(state.debounce_timer) == "userdata" then
-					state.debounce_timer:stop()
-					state.debounce_timer:close()
-				else
-					-- Legacy cleanup
-					pcall(function()
-						vim.fn.timer_stop(state.debounce_timer)
-					end)
-				end
-				state.debounce_timer = nil
-			end
-			-- Cancel active request by incrementing counter
-			state.request_counter = state.request_counter + 1
-			state.active_request_id = nil
-			-- Cancel active job
-			if state.active_job then
-				pcall(function()
-					state.active_job:shutdown()
-				end)
-				state.active_job = nil
-			end
+			cleanup.cleanup_state(state)
 			M.clear_ghost_text()
 		end,
 	})
@@ -242,24 +138,9 @@ function M.setup_completion_trigger()
 		callback = function(args)
 			local bufnr = args.buf
 			if M._buf_states and M._buf_states[bufnr] then
-				local state = M._buf_states[bufnr]
-				if state.debounce_timer then
-					if type(state.debounce_timer) == "userdata" then
-						state.debounce_timer:stop()
-						state.debounce_timer:close()
-					else
-						pcall(function()
-							vim.fn.timer_stop(state.debounce_timer)
-						end)
-					end
-				end
-				-- Cancel active job
-				if state.active_job then
-					pcall(function()
-						state.active_job:shutdown()
-					end)
-				end
-				M._buf_states[bufnr] = nil
+				local buf_state = M._buf_states[bufnr]
+				cleanup.cleanup_state(buf_state)
+				state_store.delete(M._buf_states, bufnr)
 			end
 		end,
 	})
@@ -269,25 +150,14 @@ function M.setup_completion_trigger()
 		group = TurboNeedle.augroup,
 		callback = vim.schedule_wrap(function()
 			if M._buf_states then
-				-- Get list of valid buffers
-				local valid_bufs = {}
-				for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-					if vim.api.nvim_buf_is_valid(buf) then
-						valid_bufs[buf] = true
-					end
-				end
-
-				-- Clean up states for invalid buffers
+				local valid_bufs = state_store.valid_buffers()
 				for bufnr, _ in pairs(M._buf_states) do
 					if not valid_bufs[bufnr] then
-						local state = M._buf_states[bufnr]
-						if state and state.debounce_timer then
-							if type(state.debounce_timer) == "userdata" then
-								state.debounce_timer:stop()
-								state.debounce_timer:close()
-							end
+						local buf_state = M._buf_states[bufnr]
+						if buf_state then
+							cleanup.cleanup_state(buf_state)
 						end
-						M._buf_states[bufnr] = nil
+						state_store.delete(M._buf_states, bufnr)
 					end
 				end
 			end
@@ -304,13 +174,13 @@ end
 -- Enable completions
 function M.enable()
 	enabled = true
-	logger.info("completions enabled", vim.log.levels.INFO)
+	logger.info("completions enabled")
 end
 
 -- Disable completions
 function M.disable()
 	enabled = false
-	logger.info("completions disabled", vim.log.levels.INFO)
+	logger.info("completions disabled")
 end
 
 -- Completion function: extract context and request completion
@@ -334,7 +204,7 @@ function M.complete()
 	local state = get_buf_state()
 
 	-- Check cache first
-	local cached_completion = get_cached_completion(ctx)
+	local cached_completion = completion_cache:get(ctx)
 	if cached_completion then
 		M.set_ghost_text(cached_completion)
 		return
@@ -342,9 +212,7 @@ function M.complete()
 
 	-- Cancel any existing job before starting a new request
 	if state.active_job then
-		pcall(function()
-			state.active_job:shutdown()
-		end)
+		cleanup.shutdown_job(state.active_job)
 		state.active_job = nil
 	end
 
@@ -375,7 +243,7 @@ function M.complete()
 			local completion_text = api.parse_response(result)
 
 			-- Cache the valid completion
-			cache_completion(ctx, completion_text)
+			completion_cache:set(ctx, completion_text)
 
 			-- Set ghost text for the completion
 			M.set_ghost_text(completion_text)
@@ -515,34 +383,9 @@ function M.accept_completion()
 		local cached = state.cached_completion
 		local stored_pos = state.cursor_position
 			and { row = state.cursor_position.row, col = state.cursor_position.col }
-		local lines_copy = vim.split(cached or "", "\n", { plain = true })
-
 		-- Schedule the insertion to avoid textlock
 		vim.schedule(function()
-			-- Revalidate state & cursor
-			if not cached or not stored_pos then
-				return
-			end
-			local cur = vim.api.nvim_win_get_cursor(0)
-			local row = cur[1] - 1
-			local col = cur[2]
-			if row ~= stored_pos.row then
-				return
-			end
-			local sched_final
-			local line_text = vim.api.nvim_get_current_line()
-			local line_len = #line_text
-			if col > line_len then
-				col = line_len
-			end
-
-			if pcall(vim.api.nvim_buf_set_text, 0, row, col, row, col, lines_copy) then
-				if #lines_copy == 1 then
-					sched_final = { row = row, col = col + #lines_copy[1] }
-				else
-					sched_final = { row = row + (#lines_copy - 1), col = #lines_copy[#lines_copy] }
-				end
-			end
+			local sched_final = edit.insert_at_cursor(cached, stored_pos)
 			M.clear_ghost_text()
 			if sched_final then
 				pcall(vim.api.nvim_win_set_cursor, 0, { sched_final.row + 1, sched_final.col })
