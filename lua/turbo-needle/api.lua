@@ -1,5 +1,3 @@
-local Job = require("plenary.job")
-
 local M = {}
 
 -- Build FIM (Fill-in-the-Middle) prompt
@@ -9,8 +7,9 @@ local function build_fim_prompt(code_opts)
 	return string.format("<|fim_prefix|>%s<|fim_suffix|>%s<|fim_middle|>", prefix, suffix)
 end
 
--- Default curl args builder for llama.cpp completion API
+-- Default request builder for llama.cpp completion API
 function M.build_curl_args(provider_opts, code_opts, api_key)
+	local stream = provider_opts.stream ~= false
 	local headers = {
 		["Content-Type"] = "application/json",
 	}
@@ -24,7 +23,7 @@ function M.build_curl_args(provider_opts, code_opts, api_key)
 		model = provider_opts.model,
 		prompt = build_fim_prompt(code_opts),
 		max_tokens = provider_opts.max_tokens or 256,
-		stream = false,
+		stream = stream,
 	}
 
 	-- Add optional parameters if they are set
@@ -46,73 +45,17 @@ function M.build_curl_args(provider_opts, code_opts, api_key)
 		headers = headers,
 		body = body,
 		timeout = provider_opts.timeout,
+		stream = stream,
 	}
 end
 
--- Execute HTTP request using plenary.job + curl
-function M.request_completion(curl_args, callback)
-	-- Build curl command arguments for plenary.job
-	local args = { "-s", "-X", "POST" }
+-- Execute HTTP request through the configured transport
+function M.request_completion(request_opts, callback)
+	local transport = require("turbo-needle.transport")
 
-	-- Add headers
-	for k, v in pairs(curl_args.headers) do
-		table.insert(args, "-H")
-		table.insert(args, k .. ": " .. v)
-	end
-
-	-- Add timeout (convert from milliseconds to seconds for curl)
-	table.insert(args, "--max-time")
-	table.insert(args, tostring(curl_args.timeout / 1000))
-
-	-- Add data and URL
-	table.insert(args, "-d")
-	table.insert(args, vim.json.encode(curl_args.body))
-	table.insert(args, curl_args.url)
-
-	-- Execute with plenary.job
-	local job = Job:new({
-		command = "curl",
-		args = args,
-		on_exit = vim.schedule_wrap(function(job, return_val)
-			if return_val == 0 then
-				-- Get stdout from the job
-				local stdout = job:result()
-				local output = table.concat(stdout, "\n")
-
-				-- Check if output exists and is not empty
-				if not output or output == "" then
-					callback("Empty response from server", nil)
-					return
-				end
-
-				local success, result = pcall(vim.json.decode, output)
-				if success and result then
-					callback(nil, result)
-				else
-					-- Try to provide more context about the JSON error
-					local error_detail = "Invalid JSON response"
-					if not success and result then
-						error_detail = error_detail .. ": " .. tostring(result)
-					end
-					callback(error_detail, nil)
-				end
-			else
-				local error_msg = "Curl error: " .. tostring(return_val or "unknown")
-
-				-- Get stderr from the job
-				local stderr = job:stderr_result()
-				if stderr and #stderr > 0 then
-					local stderr_msg = table.concat(stderr, "\n"):match("^%s*(.-)%s*$") or table.concat(stderr, "\n")
-					error_msg = error_msg .. " - " .. stderr_msg
-				end
-
-				callback(error_msg, nil)
-			end
-		end),
+	return transport.request(request_opts, {
+		on_done = callback,
 	})
-
-	job:start()
-	return job
 end
 
 -- Main completion request function

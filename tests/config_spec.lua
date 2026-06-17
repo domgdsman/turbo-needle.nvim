@@ -19,6 +19,7 @@ describe("turbo-needle.config", function()
 			assert.is_nil(api.api_key) -- Optional field, defaults to nil
 			assert.are.equal(256, api.max_tokens) -- Default value
 			assert.is_nil(api.temperature) -- Optional field, defaults to nil
+			assert.is_true(api.stream)
 			assert.are.equal(5000, api.timeout)
 		end)
 
@@ -115,6 +116,36 @@ describe("turbo-needle.config", function()
 				keymaps = { accept = "<Tab>" },
 				filetypes = {},
 			}))
+		end)
+
+		it("should validate stream when set", function()
+			assert.is_true(config.validate({
+				api = {
+					base_url = "http://localhost:8000",
+					model = "test",
+					stream = true,
+					timeout = 5000,
+				},
+				completions = { debounce_ms = 300 },
+				keymaps = { accept = "<Tab>" },
+				filetypes = {},
+			}))
+		end)
+
+		it("should reject non-boolean stream", function()
+			assert.has_error(function()
+				config.validate({
+					api = {
+						base_url = "http://localhost:8000",
+						model = "test",
+						stream = "true",
+						timeout = 5000,
+					},
+					completions = { debounce_ms = 300 },
+					keymaps = { accept = "<Tab>" },
+					filetypes = {},
+				})
+			end)
 		end)
 
 		it("should reject non-number max_tokens", function()

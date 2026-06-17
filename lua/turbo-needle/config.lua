@@ -23,6 +23,7 @@ M.defaults = {
 		top_p = nil, -- Optional: Top-p sampling parameter
 		top_k = nil, -- Optional: Top-k sampling parameter
 		repetition_penalty = nil, -- Optional: Repetition penalty parameter
+		stream = true, -- Use curl's streaming response path unless explicitly disabled
 		timeout = 5000,
 	},
 	completions = {
@@ -56,6 +57,9 @@ function M.validate(config)
 	validate("api.base_url", config.api.base_url, "string")
 	validate("api.model", config.api.model, "string")
 	validate("api.timeout", config.api.timeout, "number")
+	if config.api.stream ~= nil then
+		validate("api.stream", config.api.stream, "boolean")
+	end
 	validate("completions.debounce_ms", config.completions.debounce_ms, "number")
 
 	-- Validate api_key is string when set and not empty
