@@ -14,16 +14,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Install System Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y neovim lua5.1 liblua5.1-0-dev luarocks
-
-      - name: Install Luacheck
-        run: sudo luarocks install luacheck 1.2.0-1
-
-      - name: Install StyLua
-        run: npm install -g @johnnymorganz/stylua-bin@2.3.1
+      - name: Install Nix
+        uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934 # v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Lint
         run: make lint
