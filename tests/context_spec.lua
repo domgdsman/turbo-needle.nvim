@@ -1,7 +1,7 @@
 ---@diagnostic disable: undefined-field, need-check-nil
 
 local context = require("turbo-needle.context")
-local mock = require("luassert.mock")
+local templates = require("turbo-needle.templates")
 
 describe("turbo-needle.context", function()
 	describe("extract_context", function()
@@ -72,37 +72,126 @@ describe("turbo-needle.context", function()
 
 			vim.api.nvim_buf_delete(bufnr, { force = true })
 		end)
+
+		it("should apply configurable max_chars and trim far context first", function()
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+				"old1",
+				"old2",
+				"near_prefix",
+				"cursor_here_suffix",
+				"near_suffix",
+				"far1",
+				"far2",
+			})
+
+			local result = context.extract_context(bufnr, 3, 6, {
+				max_chars = 32,
+				prefix_ratio = 0.5,
+				include_filename = false,
+				include_language = false,
+			})
+
+			assert.matches("cursor$", result.prefix)
+			assert.matches("^_here", result.suffix)
+			assert.is_nil(result.prefix:find("old1", 1, true))
+			assert.is_nil(result.suffix:find("far2", 1, true))
+
+			vim.api.nvim_buf_delete(bufnr, { force = true })
+		end)
+
+		it("should allocate context budget using prefix_ratio", function()
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+				"a1",
+				"a2",
+				"a3",
+				"current",
+				"b1",
+				"b2",
+				"b3",
+			})
+
+			local even = context.extract_context(bufnr, 3, 3, {
+				max_chars = 14,
+				prefix_ratio = 0.5,
+				include_filename = false,
+				include_language = false,
+			})
+			local prefix_heavy = context.extract_context(bufnr, 3, 3, {
+				max_chars = 14,
+				prefix_ratio = 0.75,
+				include_filename = false,
+				include_language = false,
+			})
+
+			assert.are.equal("a3\ncur", even.prefix)
+			assert.are.equal("rent", even.suffix)
+			assert.are.equal("a2\na3\ncur", prefix_heavy.prefix)
+			assert.are.equal("rent", prefix_heavy.suffix)
+
+			vim.api.nvim_buf_delete(bufnr, { force = true })
+		end)
 	end)
 
 	describe("get_current_context", function()
-		it("should get context from current buffer and cursor", function()
-			-- Mock vim.api for testing
-			local api = mock(vim.api, true)
+		it("should get context and metadata from current buffer and cursor", function()
+			local turbo_needle = require("turbo-needle")
+			turbo_needle.setup({
+				context = {
+					max_chars = 12000,
+					prefix_ratio = 0.75,
+					include_filename = true,
+					include_language = true,
+				},
+			})
 
-			-- Create test buffer content
-			local test_lines = {
+			local previous_buf = vim.api.nvim_get_current_buf()
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_name(bufnr, "/tmp/turbo-needle-context.lua")
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
 				"local x = 1",
 				"print(x)",
-			}
-
-			-- Setup mock expectations
-			api.nvim_get_current_buf.returns(1)
-			api.nvim_win_get_cursor.returns({ 2, 6 }) -- 1-based: line 2, col 6 (0-based)
-			api.nvim_buf_get_lines.invokes(function(bufnr, start, end_, strict)
-				return test_lines
-			end)
+			})
+			vim.api.nvim_set_current_buf(bufnr)
+			vim.bo[bufnr].filetype = "lua"
+			vim.api.nvim_win_set_cursor(0, { 2, 6 })
 
 			local result = context.get_current_context()
 
 			assert.are.equal("local x = 1\nprint(", result.prefix)
 			assert.are.equal("x)", result.suffix)
+			assert.are.equal("turbo-needle-context.lua", result.filename)
+			assert.are.equal("lua", result.language)
 
-			-- Verify functions were called with expected arguments
-			assert.stub(api.nvim_get_current_buf).was_called()
-			assert.stub(api.nvim_win_get_cursor).was_called()
-			assert.stub(api.nvim_buf_get_lines).was_called_with(1, 0, -1, false)
+			vim.api.nvim_set_current_buf(previous_buf)
+			vim.api.nvim_buf_delete(bufnr, { force = true })
+		end)
 
-			mock.revert(api)
+		it("should render filename and language placeholders from real context", function()
+			local turbo_needle = require("turbo-needle")
+			turbo_needle.setup()
+
+			local previous_buf = vim.api.nvim_get_current_buf()
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_name(bufnr, "/tmp/template-context.lua")
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+				"local value =",
+				"print(value)",
+			})
+			vim.api.nvim_set_current_buf(bufnr)
+			vim.bo[bufnr].filetype = "lua"
+			vim.api.nvim_win_set_cursor(0, { 1, 14 })
+
+			local ctx = context.get_current_context()
+			local rendered = templates.render({
+				prompt = "file={filename} lang={language} {prefix}<hole>{suffix}",
+			}, ctx)
+
+			assert.are.equal("file=template-context.lua lang=lua local value <hole>=\nprint(value)", rendered)
+
+			vim.api.nvim_set_current_buf(previous_buf)
+			vim.api.nvim_buf_delete(bufnr, { force = true })
 		end)
 	end)
 

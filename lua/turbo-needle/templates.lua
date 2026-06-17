@@ -140,6 +140,15 @@ function M.render(template, context)
 end
 
 function M.chat_messages(context)
+	local metadata = {}
+	if context.filename and context.filename ~= "" then
+		table.insert(metadata, "Filename: " .. context.filename)
+	end
+	if context.language and context.language ~= "" then
+		table.insert(metadata, "Language: " .. context.language)
+	end
+	local metadata_text = #metadata > 0 and (table.concat(metadata, "\n") .. "\n\n") or ""
+
 	return {
 		{
 			role = "system",
@@ -147,7 +156,11 @@ function M.chat_messages(context)
 		},
 		{
 			role = "user",
-			content = "Prefix:\n" .. (context.prefix or "") .. "\n\nSuffix:\n" .. (context.suffix or ""),
+			content = metadata_text
+				.. "Prefix:\n"
+				.. (context.prefix or "")
+				.. "\n\nSuffix:\n"
+				.. (context.suffix or ""),
 		},
 	}
 end

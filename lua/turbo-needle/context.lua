@@ -5,24 +5,128 @@ local context_cache = {
 	bufnr = nil,
 	cursor_row = nil,
 	cursor_col = nil,
+	options_cache_key = nil,
 	context = nil,
 	timestamp = 0,
 }
 
--- Maximum context size limits
-local MAX_PREFIX_LINES = 50
-local MAX_SUFFIX_LINES = 50
-local MAX_LINE_LENGTH = 200
 local CACHE_TTL_MS = 500 -- Cache validity time (increased from 100ms to 500ms)
 
+local default_options = {
+	max_chars = 12000,
+	prefix_ratio = 0.75,
+	include_filename = true,
+	include_language = true,
+}
+
+local function normalize_options(opts)
+	return vim.tbl_extend("force", default_options, opts or {})
+end
+
+local function cache_key_for_options(opts)
+	return table.concat({
+		tostring(opts.max_chars),
+		tostring(opts.prefix_ratio),
+		tostring(opts.include_filename),
+		tostring(opts.include_language),
+	}, "|")
+end
+
+local function char_len(value)
+	return vim.fn.strcharlen(value or "")
+end
+
+local function char_part(value, start, length)
+	return vim.fn.strcharpart(value or "", start, length)
+end
+
+local function trim_prefix_to_budget(prefix, budget)
+	if budget <= 0 then
+		return ""
+	end
+	if char_len(prefix) <= budget then
+		return prefix
+	end
+
+	local trimmed = char_part(prefix, char_len(prefix) - budget, budget)
+	local newline = trimmed:find("\n", 1, true)
+	if newline and newline < #trimmed then
+		return trimmed:sub(newline + 1)
+	end
+	return trimmed
+end
+
+local function trim_suffix_to_budget(suffix, budget)
+	if budget <= 0 then
+		return ""
+	end
+	if char_len(suffix) <= budget then
+		return suffix
+	end
+
+	local trimmed = char_part(suffix, 0, budget)
+	local last_newline = nil
+	local search_start = 1
+	while true do
+		local newline = trimmed:find("\n", search_start, true)
+		if not newline then
+			break
+		end
+		last_newline = newline
+		search_start = newline + 1
+	end
+	if last_newline and last_newline > 1 then
+		return trimmed:sub(1, last_newline - 1)
+	end
+	return trimmed
+end
+
+local function apply_budget(prefix, suffix, opts)
+	local max_chars = opts.max_chars
+	local prefix_len = char_len(prefix)
+	local suffix_len = char_len(suffix)
+
+	if prefix_len + suffix_len <= max_chars then
+		return prefix, suffix
+	end
+
+	local prefix_budget = math.floor(max_chars * opts.prefix_ratio)
+	local suffix_budget = max_chars - prefix_budget
+
+	if prefix_len < prefix_budget then
+		suffix_budget = suffix_budget + (prefix_budget - prefix_len)
+		prefix_budget = prefix_len
+	elseif suffix_len < suffix_budget then
+		prefix_budget = prefix_budget + (suffix_budget - suffix_len)
+		suffix_budget = suffix_len
+	end
+
+	return trim_prefix_to_budget(prefix, prefix_budget), trim_suffix_to_budget(suffix, suffix_budget)
+end
+
+local function add_metadata(result, bufnr, opts)
+	if opts.include_filename then
+		local name = vim.api.nvim_buf_get_name(bufnr)
+		result.filename = name ~= "" and vim.fn.fnamemodify(name, ":t") or ""
+	end
+	if opts.include_language then
+		result.language = vim.bo[bufnr].filetype or ""
+	end
+	return result
+end
+
 -- Extract code context around cursor for FIM completion
-function M.extract_context(bufnr, cursor_row, cursor_col)
+function M.extract_context(bufnr, cursor_row, cursor_col, opts)
+	opts = normalize_options(opts)
+	local options_cache_key = cache_key_for_options(opts)
+
 	-- Check cache first
 	local current_time = vim.loop.now()
 	if
 		context_cache.bufnr == bufnr
 		and context_cache.cursor_row == cursor_row
 		and context_cache.cursor_col == cursor_col
+		and context_cache.options_cache_key == options_cache_key
 		and (current_time - context_cache.timestamp) < CACHE_TTL_MS
 	then
 		return context_cache.context
@@ -34,11 +138,12 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 
 	-- Validate cursor position
 	if cursor_row < 0 or cursor_row > total_lines - 1 then
-		local empty_context = { prefix = "", suffix = "" }
+		local empty_context = add_metadata({ prefix = "", suffix = "" }, bufnr, opts)
 		context_cache = {
 			bufnr = bufnr,
 			cursor_row = cursor_row,
 			cursor_col = cursor_col,
+			options_cache_key = options_cache_key,
 			context = empty_context,
 			timestamp = current_time,
 		}
@@ -49,15 +154,10 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 	-- Convert to 1-based for Lua string operations and array indexing
 	local cursor_line_1based = cursor_row + 1
 
-	-- Extract prefix: all content before cursor (with size limits)
+	-- Extract prefix: all content before cursor.
 	local prefix_lines = {}
-	local prefix_start = math.max(1, cursor_line_1based - MAX_PREFIX_LINES)
-	for i = prefix_start, cursor_line_1based - 1 do
-		local line = all_lines[i]
-		if line and #line > MAX_LINE_LENGTH then
-			line = line:sub(1, MAX_LINE_LENGTH) .. "..."
-		end
-		table.insert(prefix_lines, line)
+	for i = 1, cursor_line_1based - 1 do
+		table.insert(prefix_lines, all_lines[i])
 	end
 
 	local prefix = table.concat(prefix_lines, "\n")
@@ -77,7 +177,7 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 		-- When cursor_col is 0, we're at the beginning of the line, no prefix from current line
 	end
 
-	-- Extract suffix: all content after cursor
+	-- Extract suffix: all content after cursor.
 	local suffix_lines = {}
 	local has_suffix_part = false
 	if cursor_line_1based <= total_lines then
@@ -97,14 +197,9 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 		-- If cursor_col > #current_line (shouldn't happen normally), treat as end of line
 	end
 
-	-- Add remaining lines after current line (with size limits)
-	local suffix_end = math.min(total_lines, cursor_line_1based + MAX_SUFFIX_LINES)
-	for i = cursor_line_1based + 1, suffix_end do
-		local line = all_lines[i]
-		if line and #line > MAX_LINE_LENGTH then
-			line = line:sub(1, MAX_LINE_LENGTH) .. "..."
-		end
-		table.insert(suffix_lines, line)
+	-- Add remaining lines after current line.
+	for i = cursor_line_1based + 1, total_lines do
+		table.insert(suffix_lines, all_lines[i])
 	end
 
 	-- If no suffix part but there are remaining lines, add empty string to start with \n
@@ -112,16 +207,20 @@ function M.extract_context(bufnr, cursor_row, cursor_col)
 		table.insert(suffix_lines, 1, "")
 	end
 
-	local result = {
+	local suffix = table.concat(suffix_lines, "\n")
+	prefix, suffix = apply_budget(prefix, suffix, opts)
+
+	local result = add_metadata({
 		prefix = prefix,
-		suffix = table.concat(suffix_lines, "\n"),
-	}
+		suffix = suffix,
+	}, bufnr, opts)
 
 	-- Update cache
 	context_cache = {
 		bufnr = bufnr,
 		cursor_row = cursor_row,
 		cursor_col = cursor_col,
+		options_cache_key = options_cache_key,
 		context = result,
 		timestamp = current_time,
 	}
@@ -140,7 +239,10 @@ function M.get_current_context()
 
 	local row, col = cursor[1] - 1, cursor[2] -- Convert row to 0-based, col is already 0-based
 
-	return M.extract_context(bufnr, row, col)
+	local turbo_needle = require("turbo-needle")
+	local config = turbo_needle.get_config()
+
+	return M.extract_context(bufnr, row, col, config.context)
 end
 
 -- Check if current file type is supported

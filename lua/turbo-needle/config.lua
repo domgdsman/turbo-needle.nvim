@@ -37,6 +37,12 @@ M.defaults = {
 	completions = {
 		debounce_ms = 600,
 	},
+	context = {
+		max_chars = 12000,
+		prefix_ratio = 0.75,
+		include_filename = true,
+		include_language = true,
+	},
 	postprocess = {
 		enabled = true,
 		trim_suffix_overlap = true,
@@ -77,6 +83,7 @@ function M.validate(config)
 	validate("config", config, "table")
 	validate("config.api", config.api, "table")
 	validate("config.completions", config.completions, "table")
+	validate("config.context", config.context, "table")
 	if config.postprocess then
 		validate("config.postprocess", config.postprocess, "table")
 	end
@@ -123,6 +130,16 @@ function M.validate(config)
 	validate("api.extra_body", extra_body, "table")
 	validate("api.headers", headers, "table")
 	validate("completions.debounce_ms", config.completions.debounce_ms, "number")
+	validate("context.max_chars", config.context.max_chars, "number")
+	validate("context.prefix_ratio", config.context.prefix_ratio, "number")
+	validate("context.include_filename", config.context.include_filename, "boolean")
+	validate("context.include_language", config.context.include_language, "boolean")
+	if config.context.max_chars < 1 then
+		error("context.max_chars must be greater than 0", 0)
+	end
+	if config.context.prefix_ratio < 0 or config.context.prefix_ratio > 1 then
+		error("context.prefix_ratio must be between 0 and 1", 0)
+	end
 	local postprocess = config.postprocess or M.defaults.postprocess
 	validate("postprocess.enabled", postprocess.enabled, "boolean")
 	validate("postprocess.trim_suffix_overlap", postprocess.trim_suffix_overlap, "boolean")

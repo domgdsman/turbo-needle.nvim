@@ -97,6 +97,22 @@ describe("turbo-needle.templates", function()
 		end)
 	end)
 
+	describe("chat_messages", function()
+		it("includes filename and language metadata when present", function()
+			local messages = templates.chat_messages({
+				prefix = "local x = ",
+				suffix = "\nprint(x)",
+				filename = "init.lua",
+				language = "lua",
+			})
+
+			assert.are.equal(
+				"Filename: init.lua\nLanguage: lua\n\nPrefix:\nlocal x = \n\nSuffix:\n\nprint(x)",
+				messages[2].content
+			)
+		end)
+	end)
+
 	describe("resolve_name", function()
 		it("matches common model names", function()
 			assert.are.equal("qwen_coder", templates.resolve_name({ model = "Qwen2.5-Coder-7B" }))

@@ -8,6 +8,7 @@ describe("turbo-needle.config", function()
 			assert.is_not_nil(config.defaults)
 			assert.is_table(config.defaults.api)
 			assert.is_table(config.defaults.completions)
+			assert.is_table(config.defaults.context)
 			assert.is_table(config.defaults.postprocess)
 			assert.is_table(config.defaults.keymaps)
 			assert.is_table(config.defaults.filetypes)
@@ -35,6 +36,14 @@ describe("turbo-needle.config", function()
 		it("should have default completions settings", function()
 			local completions = config.defaults.completions
 			assert.are.equal(600, completions.debounce_ms)
+		end)
+
+		it("should have default context settings", function()
+			local context = config.defaults.context
+			assert.are.equal(12000, context.max_chars)
+			assert.are.equal(0.75, context.prefix_ratio)
+			assert.is_true(context.include_filename)
+			assert.is_true(context.include_language)
 		end)
 
 		it("should have default postprocess settings", function()
@@ -106,6 +115,7 @@ describe("turbo-needle.config", function()
 					timeout = 5000,
 				},
 				completions = { debounce_ms = 300, throttle_ms = 1000 },
+				context = vim.deepcopy(config.defaults.context),
 				keymaps = { accept = "<Tab>" },
 				filetypes = {},
 			}))
@@ -121,6 +131,7 @@ describe("turbo-needle.config", function()
 						timeout = 5000,
 					},
 					completions = { debounce_ms = 300, throttle_ms = 600 },
+					context = vim.deepcopy(config.defaults.context),
 					keymaps = { accept = "<Tab>" },
 					filetypes = {},
 				})
@@ -137,6 +148,7 @@ describe("turbo-needle.config", function()
 					timeout = 5000,
 				},
 				completions = { debounce_ms = 300, throttle_ms = 600 },
+				context = vim.deepcopy(config.defaults.context),
 				keymaps = { accept = "<Tab>" },
 				filetypes = {},
 			}))
@@ -176,6 +188,33 @@ describe("turbo-needle.config", function()
 			end)
 		end)
 
+		it("should validate context settings", function()
+			local valid = vim.deepcopy(config.defaults)
+			valid.context.max_chars = 6000
+			valid.context.prefix_ratio = 0.6
+			valid.context.include_filename = false
+			valid.context.include_language = true
+			assert.is_true(config.validate(valid))
+
+			local invalid_max_chars = vim.deepcopy(config.defaults)
+			invalid_max_chars.context.max_chars = 0
+			assert.has_error(function()
+				config.validate(invalid_max_chars)
+			end)
+
+			local invalid_ratio = vim.deepcopy(config.defaults)
+			invalid_ratio.context.prefix_ratio = 1.5
+			assert.has_error(function()
+				config.validate(invalid_ratio)
+			end)
+
+			local invalid_metadata = vim.deepcopy(config.defaults)
+			invalid_metadata.context.include_filename = "yes"
+			assert.has_error(function()
+				config.validate(invalid_metadata)
+			end)
+		end)
+
 		it("should validate stream when set", function()
 			assert.is_true(config.validate({
 				api = {
@@ -185,6 +224,7 @@ describe("turbo-needle.config", function()
 					timeout = 5000,
 				},
 				completions = { debounce_ms = 300 },
+				context = vim.deepcopy(config.defaults.context),
 				keymaps = { accept = "<Tab>" },
 				filetypes = {},
 			}))
@@ -261,6 +301,7 @@ describe("turbo-needle.config", function()
 						timeout = 5000,
 					},
 					completions = { debounce_ms = 300 },
+					context = vim.deepcopy(config.defaults.context),
 					keymaps = { accept = "<Tab>" },
 					filetypes = {},
 				})
@@ -277,6 +318,7 @@ describe("turbo-needle.config", function()
 						timeout = 5000,
 					},
 					completions = { debounce_ms = 300, throttle_ms = 600 },
+					context = vim.deepcopy(config.defaults.context),
 					keymaps = { accept = "<Tab>" },
 					filetypes = {},
 				})
@@ -293,6 +335,7 @@ describe("turbo-needle.config", function()
 						timeout = 5000,
 					},
 					completions = { debounce_ms = 300, throttle_ms = 600 },
+					context = vim.deepcopy(config.defaults.context),
 					keymaps = { accept = "<Tab>" },
 					filetypes = {},
 				})

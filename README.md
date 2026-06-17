@@ -26,6 +26,12 @@ AI code completions for Neovim.
       completions = {
         debounce_ms = 300,
       },
+      context = {
+        max_chars = 12000,
+        prefix_ratio = 0.75,
+        include_filename = true,
+        include_language = true,
+      },
       postprocess = {
         enabled = true,
         trim_suffix_overlap = true,
@@ -74,6 +80,12 @@ Additional request fields can be passed through `api.extra_body`, and provider-s
 `api.template` selects the FIM prompt format used for `fim_prompt` requests. When it is unset, turbo-needle picks a default from `api.model`. Built-in templates include `qwen_coder`, `stable_code`, `starcoder`, `codellama`, `codestral`, `deepseek_coder`, `codegemma`, `generic_fim`, and `hole_filler_chat`.
 
 Use `api.custom_template` for a literal prompt template. Custom templates must include `{prefix}` and `{suffix}` placeholders. `api.stop` defaults to `"auto"`, which sends stop tokens from the selected template. Set it to a string or list to add explicit stop tokens; duplicates are removed deterministically.
+
+Templates can also use `{filename}` and `{language}`. These values come from the current buffer name and `vim.bo.filetype` when `context.include_filename` and `context.include_language` are enabled.
+
+## Completion Context
+
+`context.max_chars` controls the total prefix plus suffix character budget sent to the completion provider. `context.prefix_ratio` controls how that budget is split when both sides exceed the limit; nearby cursor text is kept first, with older prefix text and farther suffix text truncated before local context. Filename and language metadata are included by default for contextual awareness and are also added to chat fallback prompts.
 
 ## Completion Postprocessing
 

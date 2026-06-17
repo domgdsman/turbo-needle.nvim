@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.24
+
+- Add configurable completion context budgeting with prefix/suffix allocation.
+- Preserve nearby cursor context while trimming distant prefix and suffix text first.
+- Populate filename and language metadata for template rendering and chat fallback prompts.
+
 ## v0.0.23
 
 - Keep visible ghost completions synchronized while typing matching text.
