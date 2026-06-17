@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.0.22
+
+- Add structured completion postprocess classification for rejected inline completions.
+- Clean markdown code fences and thinking artifacts, and reject stop-token-only, line-rewrite, repeated-line, duplicate-prefix, duplicate-suffix, and optionally too-short completions.
+- Retry completed API responses once by default when postprocessing classifies the response as retryable.
+- Keep rejected completions out of the cache and ghost text display path.
+- Document and validate `postprocess.retry` settings.
+
 ## v0.0.21
 
 - Add completion postprocessing for whitespace rejection, sentinel cleanup, overlap trimming, and optional length caps.

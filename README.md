@@ -33,6 +33,19 @@ AI code completions for Neovim.
         strip_stop_tokens = true,
         max_lines = nil,
         max_chars = nil,
+        min_chars = nil,
+        retry = {
+          enabled = true,
+          max_attempts = 1,
+          on_reasons = {
+            empty = true,
+            whitespace = true,
+            stop_token_only = true,
+            thinking = true,
+            repetition = true,
+            line_rewrite = true,
+          },
+        },
       },
       keymaps = {
         accept = "<Tab>",
@@ -64,4 +77,6 @@ Use `api.custom_template` for a literal prompt template. Custom templates must i
 
 ## Completion Postprocessing
 
-`postprocess` cleans API output before it is cached or displayed as ghost text. By default it rejects whitespace-only completions, strips common FIM/chat sentinel tokens, trims duplicated text around the cursor, and removes trailing whitespace while preserving leading indentation. Set `max_lines` or `max_chars` to cap inserted completion size.
+`postprocess` cleans API output before it is cached or displayed as ghost text. By default it rejects whitespace-only completions, strips common FIM/chat sentinel tokens, unwraps markdown code fences, removes `<think>` artifacts, trims duplicated text around the cursor, rejects repeated-line output, and removes trailing whitespace while preserving leading indentation. Set `max_lines` or `max_chars` to cap inserted completion size, or `min_chars` to reject very short completions.
+
+`postprocess.retry` retries useless model responses after a completed API response is classified as retryable. It does not retry network or transport failures. Rejected completions are not cached or displayed as ghost text, and `max_attempts` limits the number of retry requests.

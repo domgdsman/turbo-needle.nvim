@@ -25,6 +25,21 @@ local function get_buf_state()
 	return state_store.get(M._buf_states)
 end
 
+local function should_retry_postprocess(result, retry_config, attempt)
+	retry_config = retry_config or {}
+	if retry_config.enabled == false then
+		return false
+	end
+	if attempt >= (retry_config.max_attempts or 0) then
+		return false
+	end
+	if not result.rejected or not result.retryable then
+		return false
+	end
+	local on_reasons = retry_config.on_reasons or {}
+	return on_reasons[result.reason] == true
+end
+
 -- Private config storage
 local _config = config.defaults
 
@@ -137,44 +152,56 @@ function M.complete()
 	local request_id = state.request_counter
 	state.active_request_id = request_id
 
-	-- Start the new request and store the job for potential cancellation
-	state.active_job = api.get_completion(
-		{ prefix = ctx.prefix, suffix = ctx.suffix },
-		vim.schedule_wrap(function(err, result)
-			-- Check if this request was cancelled (newer request started)
-			if state.active_request_id ~= request_id then
-				return -- Request was cancelled, ignore result
-			end
-
-			-- Clear the active request and job
-			state.active_request_id = nil
-			state.active_job = nil
-
-			if err then
-				logger.error("Completion error: " .. err)
-				return
-			end
-
-			-- Parse the completion text from API response
-			local raw_completion_text = api.parse_response(result, _config.api)
-			local completion_text = postprocess.apply(raw_completion_text, {
-				config = _config.postprocess,
-				api = _config.api,
+	local function request_completion(attempt)
+		state.active_job = api.get_completion(
+			{
 				prefix = ctx.prefix,
 				suffix = ctx.suffix,
-			})
-			if not completion_text then
-				return
-			end
+			},
+			vim.schedule_wrap(function(err, result)
+				-- Check if this request was cancelled (newer request started)
+				if state.active_request_id ~= request_id then
+					return -- Request was cancelled, ignore result
+				end
 
-			-- Cache the valid completion
-			completion_cache:set(cache_ctx, completion_text)
+				-- Clear the active request and job
+				state.active_request_id = nil
+				state.active_job = nil
 
-			-- Set ghost text for the completion
-			M.set_ghost_text(completion_text)
-		end),
-		_config.api.api_key
-	)
+				if err then
+					logger.error("Completion error: " .. err)
+					return
+				end
+
+				-- Parse the completion text from API response
+				local raw_completion_text = api.parse_response(result, _config.api)
+				local postprocess_result = postprocess.classify(raw_completion_text, {
+					config = _config.postprocess,
+					api = _config.api,
+					prefix = ctx.prefix,
+					suffix = ctx.suffix,
+				})
+				local completion_text = postprocess_result.text
+				if not completion_text then
+					if should_retry_postprocess(postprocess_result, _config.postprocess.retry, attempt) then
+						state.active_request_id = request_id
+						request_completion(attempt + 1)
+					end
+					return
+				end
+
+				-- Cache the valid completion
+				completion_cache:set(cache_ctx, completion_text)
+
+				-- Set ghost text for the completion
+				M.set_ghost_text(completion_text)
+			end),
+			_config.api.api_key
+		)
+	end
+
+	-- Start the new request and store the job for potential cancellation
+	request_completion(0)
 end
 
 -- Clear ghost text

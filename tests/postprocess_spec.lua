@@ -47,6 +47,88 @@ describe("turbo-needle.postprocess", function()
 		assert.are.equal("print(value)", result)
 	end)
 
+	it("classifies completions that only contain stop tokens", function()
+		local result = postprocess.classify("<|fim_middle|><|im_end|>", {
+			config = {},
+			prefix = "",
+			suffix = "",
+		})
+
+		assert.is_true(result.rejected)
+		assert.are.equal("stop_token_only", result.reason)
+		assert.is_true(result.retryable)
+	end)
+
+	it("unwraps markdown code fences around returned code", function()
+		local result = postprocess.apply("```lua\nprint(value)\n```", {
+			config = {},
+			prefix = "",
+			suffix = "",
+		})
+
+		assert.are.equal("print(value)", result)
+	end)
+
+	it("removes thinking artifacts and rejects thinking-only responses", function()
+		local cleaned = postprocess.apply("<think>considering</think>\nreturn value", {
+			config = {},
+			prefix = "",
+			suffix = "",
+		})
+		local rejected = postprocess.classify("<think>considering</think>", {
+			config = {},
+			prefix = "",
+			suffix = "",
+		})
+
+		assert.are.equal("return value", cleaned)
+		assert.is_true(rejected.rejected)
+		assert.are.equal("thinking", rejected.reason)
+		assert.is_true(rejected.retryable)
+	end)
+
+	it("rejects completions that rewrite the last non-empty line above the cursor", function()
+		local result = postprocess.classify("local value = input\nlocal value = compute()", {
+			config = {},
+			prefix = "local value = input\n",
+			suffix = "",
+		})
+
+		assert.is_true(result.rejected)
+		assert.are.equal("line_rewrite", result.reason)
+		assert.is_true(result.retryable)
+	end)
+
+	it("rejects extreme repeated-line output", function()
+		local result = postprocess.classify("again\nagain\nagain\nagain", {
+			config = {},
+			prefix = "",
+			suffix = "",
+		})
+
+		assert.is_true(result.rejected)
+		assert.are.equal("repetition", result.reason)
+		assert.is_true(result.retryable)
+	end)
+
+	it("classifies duplicate current line prefix and suffix responses without retry", function()
+		local duplicate_prefix = postprocess.classify("  local value = ", {
+			config = {},
+			prefix = "local value = ",
+			suffix = "",
+		})
+		local duplicate_suffix = postprocess.classify(" ) ", {
+			config = {},
+			prefix = "print(",
+			suffix = ")",
+		})
+
+		assert.are.equal("duplicate_prefix", duplicate_prefix.reason)
+		assert.is_false(duplicate_prefix.retryable)
+		assert.are.equal("duplicate_suffix", duplicate_suffix.reason)
+		assert.is_false(duplicate_suffix.retryable)
+	end)
+
 	it("strips configured stop tokens", function()
 		local result = postprocess.apply("print(value)<STOP>", {
 			config = {},

@@ -45,6 +45,11 @@ describe("turbo-needle.config", function()
 			assert.is_true(postprocess.strip_stop_tokens)
 			assert.is_nil(postprocess.max_lines)
 			assert.is_nil(postprocess.max_chars)
+			assert.is_nil(postprocess.min_chars)
+			assert.is_table(postprocess.retry)
+			assert.is_true(postprocess.retry.enabled)
+			assert.are.equal(1, postprocess.retry.max_attempts)
+			assert.is_true(postprocess.retry.on_reasons.whitespace)
 		end)
 
 		it("should have default keymaps", function()
@@ -141,6 +146,9 @@ describe("turbo-needle.config", function()
 			local valid = vim.deepcopy(config.defaults)
 			valid.postprocess.max_lines = 3
 			valid.postprocess.max_chars = 120
+			valid.postprocess.min_chars = 2
+			valid.postprocess.retry.max_attempts = 2
+			valid.postprocess.retry.on_reasons.whitespace = false
 			assert.is_true(config.validate(valid))
 
 			local invalid_enabled = vim.deepcopy(config.defaults)
@@ -153,6 +161,18 @@ describe("turbo-needle.config", function()
 			invalid_cap.postprocess.max_lines = 0
 			assert.has_error(function()
 				config.validate(invalid_cap)
+			end)
+
+			local invalid_retry = vim.deepcopy(config.defaults)
+			invalid_retry.postprocess.retry.max_attempts = -1
+			assert.has_error(function()
+				config.validate(invalid_retry)
+			end)
+
+			local invalid_reason = vim.deepcopy(config.defaults)
+			invalid_reason.postprocess.retry.on_reasons.whitespace = "yes"
+			assert.has_error(function()
+				config.validate(invalid_reason)
 			end)
 		end)
 

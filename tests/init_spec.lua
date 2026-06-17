@@ -26,8 +26,8 @@ describe("turbo-needle", function()
 
 	describe("setup", function()
 		it("should expose plugin version metadata", function()
-			assert.are.equal("0.0.21", turbo_needle.version)
-			assert.are.equal("0.0.21", turbo_needle._VERSION)
+			assert.are.equal("0.0.22", turbo_needle.version)
+			assert.are.equal("0.0.22", turbo_needle._VERSION)
 		end)
 
 		it("should setup with default configuration", function()
@@ -123,6 +123,10 @@ describe("turbo-needle", function()
 
 		it("should not cache or display whitespace-only completions", function()
 			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			local schedule_stub = stub(vim, "schedule")
+			schedule_stub.invokes(function(callback)
+				callback()
+			end)
 
 			local context = require("turbo-needle.context")
 			stub(context, "is_filetype_supported").returns(true)
@@ -137,6 +141,154 @@ describe("turbo-needle", function()
 
 			turbo_needle.complete()
 
+			assert.stub(set_ghost_stub).was_not_called()
+		end)
+
+		it("should retry retryable postprocess rejections once and display the retry result", function()
+			turbo_needle.setup({
+				postprocess = {
+					retry = {
+						enabled = true,
+						max_attempts = 1,
+						on_reasons = { whitespace = true },
+					},
+				},
+			})
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			local schedule_stub = stub(vim, "schedule")
+			schedule_stub.invokes(function(callback)
+				callback()
+			end)
+
+			local context = require("turbo-needle.context")
+			stub(context, "is_filetype_supported").returns(true)
+			stub(context, "get_current_context").returns({ prefix = "", suffix = "" })
+
+			local api = require("turbo-needle.api")
+			local calls = 0
+			stub(api, "get_completion").invokes(function(_, callback)
+				calls = calls + 1
+				if calls == 1 then
+					callback(nil, { choices = { { text = " \n\t" } } })
+				else
+					callback(nil, { choices = { { text = "return value" } } })
+				end
+				return { shutdown = function() end }
+			end)
+
+			local set_ghost_stub = stub(turbo_needle, "set_ghost_text")
+
+			turbo_needle.complete()
+
+			assert.are.equal(2, calls)
+			assert.stub(set_ghost_stub).was_called(1)
+			assert.stub(set_ghost_stub).was_called_with("return value")
+		end)
+
+		it("should not retry nonretryable postprocess rejections", function()
+			turbo_needle.setup({
+				postprocess = {
+					retry = {
+						enabled = true,
+						max_attempts = 1,
+						on_reasons = { duplicate_prefix = true },
+					},
+				},
+			})
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+
+			local context = require("turbo-needle.context")
+			stub(context, "is_filetype_supported").returns(true)
+			stub(context, "get_current_context").returns({ prefix = "local value = ", suffix = "" })
+
+			local api = require("turbo-needle.api")
+			local calls = 0
+			stub(api, "get_completion").invokes(function(_, callback)
+				calls = calls + 1
+				callback(nil, { choices = { { text = "  local value = " } } })
+				return { shutdown = function() end }
+			end)
+
+			local set_ghost_stub = stub(turbo_needle, "set_ghost_text")
+
+			turbo_needle.complete()
+
+			assert.are.equal(1, calls)
+			assert.stub(set_ghost_stub).was_not_called()
+		end)
+
+		it("should not cache rejected completions before a retry succeeds", function()
+			turbo_needle.setup({
+				postprocess = {
+					retry = {
+						enabled = false,
+						max_attempts = 1,
+						on_reasons = { whitespace = true },
+					},
+				},
+			})
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			local schedule_stub = stub(vim, "schedule")
+			schedule_stub.invokes(function(callback)
+				callback()
+			end)
+
+			local context = require("turbo-needle.context")
+			stub(context, "is_filetype_supported").returns(true)
+			stub(context, "get_current_context").returns({ prefix = "cache-key", suffix = "" })
+
+			local api = require("turbo-needle.api")
+			local calls = 0
+			stub(api, "get_completion").invokes(function(_, callback)
+				calls = calls + 1
+				if calls == 1 then
+					callback(nil, { choices = { { text = " \n\t" } } })
+				else
+					callback(nil, { choices = { { text = "return value" } } })
+				end
+				return { shutdown = function() end }
+			end)
+
+			local set_ghost_stub = stub(turbo_needle, "set_ghost_text")
+
+			turbo_needle.complete()
+			turbo_needle.complete()
+
+			assert.are.equal(2, calls)
+			assert.stub(set_ghost_stub).was_called(1)
+			assert.stub(set_ghost_stub).was_called_with("return value")
+		end)
+
+		it("should not retry stale rejected responses", function()
+			turbo_needle.setup({
+				postprocess = {
+					retry = {
+						enabled = true,
+						max_attempts = 1,
+						on_reasons = { whitespace = true },
+					},
+				},
+			})
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+
+			local context = require("turbo-needle.context")
+			stub(context, "is_filetype_supported").returns(true)
+			stub(context, "get_current_context").returns({ prefix = "", suffix = "" })
+
+			local api = require("turbo-needle.api")
+			local callbacks = {}
+			stub(api, "get_completion").invokes(function(_, callback)
+				table.insert(callbacks, callback)
+				return { shutdown = function() end }
+			end)
+
+			local set_ghost_stub = stub(turbo_needle, "set_ghost_text")
+
+			turbo_needle.complete()
+			turbo_needle.complete()
+			callbacks[1](nil, { choices = { { text = " \n\t" } } })
+
+			assert.are.equal(2, #callbacks)
 			assert.stub(set_ghost_stub).was_not_called()
 		end)
 
