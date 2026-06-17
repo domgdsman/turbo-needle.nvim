@@ -76,20 +76,6 @@ function M.validate(config)
 		validate("api.temperature", config.api.temperature, "number")
 	end
 
-	-- Validate max_tokens is number when set
-	if config.api.max_tokens ~= nil then
-		vim.validate({
-			["api.max_tokens"] = { config.api.max_tokens, "number" },
-		})
-	end
-
-	-- Validate temperature is number when set
-	if config.api.temperature ~= nil then
-		vim.validate({
-			["api.temperature"] = { config.api.temperature, "number" },
-		})
-	end
-
 	-- Validate top_p is number when set
 	if config.api.top_p ~= nil then
 		validate("api.top_p", config.api.top_p, "number")
