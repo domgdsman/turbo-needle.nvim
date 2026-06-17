@@ -13,6 +13,12 @@ AI code completions for Neovim.
       api = {
         base_url = "http://localhost:8080",
         model = "qwen3-coder:30b-a3b-instruct-gguf",
+        provider = "openai_compatible",
+        mode = "fim_prompt",
+        -- path = "/v1/fim/completions",
+        -- stream = false,
+        -- extra_body = {},
+        -- headers = {},
       },
       completions = {
         debounce_ms = 300,

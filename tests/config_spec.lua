@@ -16,10 +16,15 @@ describe("turbo-needle.config", function()
 			local api = config.defaults.api
 			assert.are.equal("http://localhost:8080", api.base_url)
 			assert.are.equal("qwen3-coder", api.model)
+			assert.are.equal("openai_compatible", api.provider)
+			assert.are.equal("fim_prompt", api.mode)
+			assert.is_nil(api.path)
 			assert.is_nil(api.api_key) -- Optional field, defaults to nil
 			assert.are.equal(256, api.max_tokens) -- Default value
 			assert.is_nil(api.temperature) -- Optional field, defaults to nil
 			assert.is_true(api.stream)
+			assert.is_table(api.extra_body)
+			assert.is_table(api.headers)
 			assert.are.equal(5000, api.timeout)
 		end)
 
@@ -130,6 +135,39 @@ describe("turbo-needle.config", function()
 				keymaps = { accept = "<Tab>" },
 				filetypes = {},
 			}))
+		end)
+
+		it("should validate provider, mode, path, headers, and extra body", function()
+			local valid = vim.deepcopy(config.defaults)
+			valid.api.provider = "litellm"
+			valid.api.mode = "fim_suffix"
+			valid.api.path = "/v1/fim/completions"
+			valid.api.headers = { ["X-Test"] = "enabled" }
+			valid.api.extra_body = { stop = { "\n\n" } }
+
+			assert.is_true(config.validate(valid))
+		end)
+
+		it("should reject invalid provider and mode", function()
+			local invalid_provider = vim.deepcopy(config.defaults)
+			invalid_provider.api.provider = "bogus"
+			assert.has_error(function()
+				config.validate(invalid_provider)
+			end)
+
+			local invalid_mode = vim.deepcopy(config.defaults)
+			invalid_mode.api.mode = "bogus"
+			assert.has_error(function()
+				config.validate(invalid_mode)
+			end)
+		end)
+
+		it("should reject non-string custom headers", function()
+			local invalid = vim.deepcopy(config.defaults)
+			invalid.api.headers = { ["X-Test"] = 12 }
+			assert.has_error(function()
+				config.validate(invalid)
+			end)
 		end)
 
 		it("should reject non-boolean stream", function()

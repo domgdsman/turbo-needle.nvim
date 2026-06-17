@@ -9,6 +9,8 @@ describe("turbo-needle.api", function()
 			local provider_opts = {
 				base_url = "http://localhost:8000",
 				model = "test-model",
+				provider = "openai_compatible",
+				mode = "fim_prompt",
 				api_key_name = nil, -- will be updated later
 				max_tokens = 200,
 				temperature = 0.7,
@@ -30,6 +32,7 @@ describe("turbo-needle.api", function()
 			assert.is_true(result.body.stream)
 			assert.is_true(result.stream)
 			assert.are.equal("http://localhost:8000/v1/completions", result.url)
+			assert.is_nil(result.body.suffix)
 		end)
 
 		it("should disable streaming mode when explicitly disabled", function()
@@ -44,6 +47,76 @@ describe("turbo-needle.api", function()
 
 			assert.is_false(result.body.stream)
 			assert.is_false(result.stream)
+		end)
+
+		it("should build llama.cpp infill requests with native prefix and suffix fields", function()
+			local result = api.build_curl_args({
+				base_url = "http://localhost:8080",
+				model = "local-model",
+				provider = "llamacpp",
+				mode = "llamacpp_infill",
+				timeout = 5000,
+				stream = false,
+			}, { prefix = "local a = ", suffix = "\nprint(a)" }, nil)
+
+			assert.are.equal("http://localhost:8080/infill", result.url)
+			assert.are.equal("local a = ", result.body.input_prefix)
+			assert.are.equal("\nprint(a)", result.body.input_suffix)
+			assert.is_nil(result.body.prompt)
+		end)
+
+		it("should allow LiteLLM FIM path overrides with suffix-aware body", function()
+			local result = api.build_curl_args({
+				base_url = "http://litellm.local",
+				model = "inception-model",
+				provider = "litellm",
+				mode = "fim_suffix",
+				path = "/v1/fim/completions",
+				timeout = 5000,
+				extra_body = { stop = { "<|end|>" } },
+			}, { prefix = "foo(", suffix = ")" }, nil)
+
+			assert.are.equal("http://litellm.local/v1/fim/completions", result.url)
+			assert.are.equal("foo(", result.body.prompt)
+			assert.are.equal(")", result.body.suffix)
+			assert.are.same({ "<|end|>" }, result.body.stop)
+		end)
+
+		it("should build chat fallback request bodies", function()
+			local result = api.build_curl_args({
+				base_url = "http://chat.local",
+				model = "chat-model",
+				provider = "chat",
+				mode = "chat_fallback",
+				timeout = 5000,
+				headers = { ["X-Provider"] = "chat" },
+			}, { prefix = "before", suffix = "after" }, "secret")
+
+			assert.are.equal("http://chat.local/v1/chat/completions", result.url)
+			assert.are.equal("Bearer secret", result.headers.Authorization)
+			assert.are.equal("chat", result.headers["X-Provider"])
+			assert.are.equal("chat-model", result.body.model)
+			assert.are.equal("system", result.body.messages[1].role)
+			assert.matches("before", result.body.messages[2].content, 1, true)
+			assert.matches("after", result.body.messages[2].content, 1, true)
+		end)
+
+		it("should produce different cache fingerprints for request shape changes", function()
+			local base = {
+				base_url = "http://localhost:8080",
+				model = "m1",
+				provider = "openai_compatible",
+				mode = "fim_prompt",
+				stream = true,
+				extra_body = {},
+			}
+			local changed_model = vim.tbl_extend("force", base, { model = "m2" })
+			local changed_mode = vim.tbl_extend("force", base, { mode = "fim_suffix" })
+			local changed_path = vim.tbl_extend("force", base, { path = "/v1/fim/completions" })
+
+			assert.are_not.equal(api.cache_fingerprint(base), api.cache_fingerprint(changed_model))
+			assert.are_not.equal(api.cache_fingerprint(base), api.cache_fingerprint(changed_mode))
+			assert.are_not.equal(api.cache_fingerprint(base), api.cache_fingerprint(changed_path))
 		end)
 	end)
 
@@ -85,6 +158,22 @@ describe("turbo-needle.api", function()
 
 			text = api.parse_response({ text = "some text" })
 			assert.are.equal("", text)
+		end)
+
+		it("should parse chat fallback and llama.cpp infill responses", function()
+			assert.are.equal(
+				"chat code",
+				api.parse_response({
+					choices = {
+						{ message = { content = "chat code" } },
+					},
+				}, { mode = "chat_fallback" })
+			)
+
+			assert.are.equal(
+				"native code",
+				api.parse_response({ content = "native code" }, { mode = "llamacpp_infill" })
+			)
 		end)
 	end)
 end)
