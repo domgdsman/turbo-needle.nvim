@@ -27,7 +27,23 @@ describe("turbo-needle.api", function()
 			assert.are.equal(0.8, result.body.top_p)
 			assert.are.equal(20, result.body.top_k)
 			assert.are.equal(1.05, result.body.repetition_penalty)
+			assert.is_false(result.body.stream)
+			assert.is_false(result.stream)
 			assert.are.equal("http://localhost:8000/v1/completions", result.url)
+		end)
+
+		it("should include streaming mode when enabled", function()
+			local provider_opts = {
+				base_url = "http://localhost:8000",
+				model = "test-model",
+				timeout = 5000,
+				stream = true,
+			}
+
+			local result = api.build_curl_args(provider_opts, { prefix = "", suffix = "" }, nil)
+
+			assert.is_true(result.body.stream)
+			assert.is_true(result.stream)
 		end)
 	end)
 
