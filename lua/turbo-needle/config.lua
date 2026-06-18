@@ -44,6 +44,19 @@ M.defaults = {
 		strip_stop_tokens = true,
 		max_lines = nil,
 		max_chars = nil,
+		min_chars = nil,
+		retry = {
+			enabled = true,
+			max_attempts = 3,
+			on_reasons = {
+				empty = true,
+				whitespace = true,
+				stop_token_only = true,
+				thinking = true,
+				repetition = true,
+				line_rewrite = true,
+			},
+		},
 	},
 	keymaps = {
 		accept = "<Tab>",
@@ -126,6 +139,23 @@ function M.validate(config)
 		if postprocess.max_chars < 1 then
 			error("postprocess.max_chars must be greater than 0", 0)
 		end
+	end
+	if postprocess.min_chars ~= nil then
+		validate("postprocess.min_chars", postprocess.min_chars, "number")
+		if postprocess.min_chars < 1 then
+			error("postprocess.min_chars must be greater than 0", 0)
+		end
+	end
+	local retry = postprocess.retry or M.defaults.postprocess.retry
+	validate("postprocess.retry", retry, "table")
+	validate("postprocess.retry.enabled", retry.enabled, "boolean")
+	validate("postprocess.retry.max_attempts", retry.max_attempts, "number")
+	if retry.max_attempts < 0 then
+		error("postprocess.retry.max_attempts must be greater than or equal to 0", 0)
+	end
+	validate("postprocess.retry.on_reasons", retry.on_reasons, "table")
+	for reason, enabled in pairs(retry.on_reasons) do
+		validate("postprocess.retry.on_reasons." .. tostring(reason), enabled, "boolean")
 	end
 
 	local valid_providers = {
