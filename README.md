@@ -30,6 +30,7 @@ AI code completions for Neovim.
         max_chars = 12000,
         prefix_ratio = 0.75,
         include_filepath = true,
+        include_ellipsis = true,
       },
       postprocess = {
         enabled = true,
@@ -80,7 +81,7 @@ Additional request fields can be passed through `api.extra_body`, and provider-s
 
 Use `api.custom_template` for a literal prompt template. Custom templates must include `{prefix}` and `{suffix}` placeholders. `api.stop` defaults to `"auto"`, which sends stop tokens from the selected template. Set it to a string or list to add explicit stop tokens; duplicates are removed deterministically.
 
-Templates can also use `{filepath}`. By default, turbo-needle prepends the full current buffer path to the prefix as a language-aware comment using `vim.bo.commentstring`, for example `-- /tmp/init.lua` in Lua or `# /tmp/example.py` in Python. When context is truncated, turbo-needle adds a matching `…` comment before the retained prefix or after the retained suffix to signal hidden buffer content.
+Templates can also use `{filepath}`. By default, turbo-needle prepends the full current buffer path to the prefix as a language-aware comment using `vim.bo.commentstring`, for example `-- /tmp/init.lua` in Lua or `# /tmp/example.py` in Python. When context is truncated and `context.include_ellipsis` is enabled, turbo-needle adds a matching `…` comment before the retained prefix or after the retained suffix to signal hidden buffer content.
 
 ## Completion Context
 

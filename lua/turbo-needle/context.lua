@@ -16,6 +16,7 @@ local default_options = {
 	max_chars = 12000,
 	prefix_ratio = 0.75,
 	include_filepath = true,
+	include_ellipsis = true,
 }
 
 local function normalize_options(opts)
@@ -27,6 +28,7 @@ local function cache_key_for_options(opts)
 		tostring(opts.max_chars),
 		tostring(opts.prefix_ratio),
 		tostring(opts.include_filepath),
+		tostring(opts.include_ellipsis),
 	}, "|")
 end
 
@@ -158,7 +160,7 @@ local function add_comment_hints(result, bufnr, opts, prefix_truncated, suffix_t
 		end
 	end
 
-	if prefix_truncated then
+	if opts.include_ellipsis and prefix_truncated then
 		table.insert(prefix_hints, comment_line(bufnr, "…"))
 	end
 
@@ -166,7 +168,7 @@ local function add_comment_hints(result, bufnr, opts, prefix_truncated, suffix_t
 		result.prefix = table.concat(prefix_hints, "\n") .. "\n" .. (result.prefix or "")
 	end
 
-	if suffix_truncated then
+	if opts.include_ellipsis and suffix_truncated then
 		local suffix = result.suffix or ""
 		if suffix ~= "" then
 			suffix = suffix .. "\n"

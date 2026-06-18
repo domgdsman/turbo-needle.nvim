@@ -41,6 +41,7 @@ M.defaults = {
 		max_chars = 12000,
 		prefix_ratio = 0.75,
 		include_filepath = true,
+		include_ellipsis = true,
 	},
 	postprocess = {
 		enabled = true,
@@ -132,6 +133,7 @@ function M.validate(config)
 	validate("context.max_chars", config.context.max_chars, "number")
 	validate("context.prefix_ratio", config.context.prefix_ratio, "number")
 	validate("context.include_filepath", config.context.include_filepath, "boolean")
+	validate("context.include_ellipsis", config.context.include_ellipsis, "boolean")
 	if config.context.max_chars < 1 then
 		error("context.max_chars must be greater than 0", 0)
 	end

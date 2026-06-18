@@ -178,6 +178,31 @@ describe("turbo-needle.context", function()
 
 			vim.api.nvim_buf_delete(bufnr, { force = true })
 		end)
+
+		it("should omit truncation hints when include_ellipsis is false", function()
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+				"old1",
+				"old2",
+				"cursor_suffix",
+				"after1",
+				"after2",
+			})
+
+			local result = context.extract_context(bufnr, 2, 6, {
+				max_chars = 18,
+				prefix_ratio = 0.5,
+				include_filepath = false,
+				include_ellipsis = false,
+			})
+
+			assert.is_nil(result.prefix:find("…", 1, true))
+			assert.is_nil(result.suffix:find("…", 1, true))
+			assert.matches("cursor$", result.prefix)
+			assert.matches("^_suffix", result.suffix)
+
+			vim.api.nvim_buf_delete(bufnr, { force = true })
+		end)
 	end)
 
 	describe("get_current_context", function()

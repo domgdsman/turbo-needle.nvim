@@ -43,6 +43,7 @@ describe("turbo-needle.config", function()
 			assert.are.equal(12000, context.max_chars)
 			assert.are.equal(0.75, context.prefix_ratio)
 			assert.is_true(context.include_filepath)
+			assert.is_true(context.include_ellipsis)
 		end)
 
 		it("should have default postprocess settings", function()
@@ -192,6 +193,7 @@ describe("turbo-needle.config", function()
 			valid.context.max_chars = 6000
 			valid.context.prefix_ratio = 0.6
 			valid.context.include_filepath = false
+			valid.context.include_ellipsis = false
 			assert.is_true(config.validate(valid))
 
 			local invalid_max_chars = vim.deepcopy(config.defaults)
@@ -210,6 +212,12 @@ describe("turbo-needle.config", function()
 			invalid_metadata.context.include_filepath = "yes"
 			assert.has_error(function()
 				config.validate(invalid_metadata)
+			end)
+
+			local invalid_ellipsis = vim.deepcopy(config.defaults)
+			invalid_ellipsis.context.include_ellipsis = "yes"
+			assert.has_error(function()
+				config.validate(invalid_ellipsis)
 			end)
 		end)
 
