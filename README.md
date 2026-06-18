@@ -26,6 +26,12 @@ AI code completions for Neovim.
       completions = {
         debounce_ms = 300,
       },
+      context = {
+        max_chars = 12000,
+        prefix_ratio = 0.75,
+        include_filepath = true,
+        include_ellipsis = true,
+      },
       postprocess = {
         enabled = true,
         trim_suffix_overlap = true,
@@ -74,6 +80,12 @@ Additional request fields can be passed through `api.extra_body`, and provider-s
 `api.template` selects the FIM prompt format used for `fim_prompt` requests. When it is unset, turbo-needle picks a default from `api.model`. Built-in templates include `qwen_coder`, `stable_code`, `starcoder`, `codellama`, `codestral`, `deepseek_coder`, `codegemma`, `generic_fim`, and `hole_filler_chat`.
 
 Use `api.custom_template` for a literal prompt template. Custom templates must include `{prefix}` and `{suffix}` placeholders. `api.stop` defaults to `"auto"`, which sends stop tokens from the selected template. Set it to a string or list to add explicit stop tokens; duplicates are removed deterministically.
+
+Templates can also use `{filepath}`. By default, turbo-needle prepends the full current buffer path to the prefix as a language-aware comment using `vim.bo.commentstring`, for example `-- /tmp/init.lua` in Lua or `# /tmp/example.py` in Python. When context is truncated and `context.include_ellipsis` is enabled, turbo-needle adds a matching `…` comment before the retained prefix or after the retained suffix to signal hidden buffer content.
+
+## Completion Context
+
+`context.max_chars` controls the total prefix plus suffix character budget sent to the completion provider. `context.prefix_ratio` controls how that budget is split when both sides exceed the limit; nearby cursor text is kept first, with older prefix text and farther suffix text truncated before local context. Filepath context is included by default because it usually implies language, framework, and project location without adding a separate metadata block.
 
 ## Completion Postprocessing
 

@@ -136,6 +136,7 @@ function M.render(template, context)
 	prompt = prompt:gsub("{suffix}", context.suffix or "")
 	prompt = prompt:gsub("{language}", context.language or "")
 	prompt = prompt:gsub("{filename}", context.filename or "")
+	prompt = prompt:gsub("{filepath}", context.filepath or "")
 	return prompt
 end
 

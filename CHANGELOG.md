@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.0.24
+
+- Add configurable completion context budgeting with prefix/suffix allocation.
+- Preserve nearby cursor context while trimming distant prefix and suffix text first.
+- Add a language-aware filepath comment hint to completion context and template rendering.
+- Add language-aware ellipsis comments when prefix or suffix context is truncated.
+- Add `context.include_ellipsis` to control truncated-context marker comments.
+- Cover redistribution of unused prefix budget to suffix context near the top of a file.
+
 ## v0.0.23
 
 - Keep visible ghost completions synchronized while typing matching text.

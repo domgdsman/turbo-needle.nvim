@@ -157,10 +157,7 @@ function M.complete()
 
 	local function request_completion(attempt)
 		state.active_job = api.get_completion(
-			{
-				prefix = ctx.prefix,
-				suffix = ctx.suffix,
-			},
+			ctx,
 			vim.schedule_wrap(function(err, result)
 				-- Check if this request was cancelled (newer request started)
 				if state.active_request_id ~= request_id then
