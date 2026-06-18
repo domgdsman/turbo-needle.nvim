@@ -36,7 +36,7 @@ AI code completions for Neovim.
         min_chars = nil,
         retry = {
           enabled = true,
-          max_attempts = 1,
+          max_attempts = 3,
           on_reasons = {
             empty = true,
             whitespace = true,

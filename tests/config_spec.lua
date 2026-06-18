@@ -48,7 +48,7 @@ describe("turbo-needle.config", function()
 			assert.is_nil(postprocess.min_chars)
 			assert.is_table(postprocess.retry)
 			assert.is_true(postprocess.retry.enabled)
-			assert.are.equal(1, postprocess.retry.max_attempts)
+			assert.are.equal(3, postprocess.retry.max_attempts)
 			assert.is_true(postprocess.retry.on_reasons.whitespace)
 		end)
 
