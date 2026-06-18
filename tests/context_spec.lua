@@ -91,8 +91,10 @@ describe("turbo-needle.context", function()
 				include_filepath = false,
 			})
 
-			assert.matches("cursor$", result.prefix)
+			assert.matches("cursor$", vim.split(result.prefix, "\n")[2])
+			assert.are.equal("# …", vim.split(result.prefix, "\n")[1])
 			assert.matches("^_here", result.suffix)
+			assert.matches("# …$", result.suffix)
 			assert.is_nil(result.prefix:find("old1", 1, true))
 			assert.is_nil(result.suffix:find("far2", 1, true))
 
@@ -122,10 +124,35 @@ describe("turbo-needle.context", function()
 				include_filepath = false,
 			})
 
-			assert.are.equal("a3\ncur", even.prefix)
-			assert.are.equal("rent", even.suffix)
-			assert.are.equal("a2\na3\ncur", prefix_heavy.prefix)
-			assert.are.equal("rent", prefix_heavy.suffix)
+			assert.are.equal("# …\na3\ncur", even.prefix)
+			assert.are.equal("rent\n# …", even.suffix)
+			assert.are.equal("# …\na2\na3\ncur", prefix_heavy.prefix)
+			assert.are.equal("rent\n# …", prefix_heavy.suffix)
+
+			vim.api.nvim_buf_delete(bufnr, { force = true })
+		end)
+
+		it("should add filepath and truncation hints with buffer comment syntax", function()
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_name(bufnr, "/tmp/context-hints.py")
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+				"before_one()",
+				"before_two()",
+				"result = call_here()",
+				"after_one()",
+				"after_two()",
+			})
+			vim.bo[bufnr].filetype = "python"
+			vim.bo[bufnr].commentstring = "# %s"
+
+			local result = context.extract_context(bufnr, 2, 8, {
+				max_chars = 30,
+				prefix_ratio = 0.5,
+				include_filepath = true,
+			})
+
+			assert.matches("^# /tmp/context%-hints%.py\n# …\n", result.prefix)
+			assert.matches("\n# …$", result.suffix)
 
 			vim.api.nvim_buf_delete(bufnr, { force = true })
 		end)

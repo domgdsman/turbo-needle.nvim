@@ -5,6 +5,7 @@
 - Add configurable completion context budgeting with prefix/suffix allocation.
 - Preserve nearby cursor context while trimming distant prefix and suffix text first.
 - Add a language-aware filepath comment hint to completion context and template rendering.
+- Add language-aware ellipsis comments when prefix or suffix context is truncated.
 
 ## v0.0.23
 

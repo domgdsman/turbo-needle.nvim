@@ -40,26 +40,26 @@ end
 
 local function trim_prefix_to_budget(prefix, budget)
 	if budget <= 0 then
-		return ""
+		return "", prefix ~= ""
 	end
 	if char_len(prefix) <= budget then
-		return prefix
+		return prefix, false
 	end
 
 	local trimmed = char_part(prefix, char_len(prefix) - budget, budget)
 	local newline = trimmed:find("\n", 1, true)
 	if newline and newline < #trimmed then
-		return trimmed:sub(newline + 1)
+		return trimmed:sub(newline + 1), true
 	end
-	return trimmed
+	return trimmed, true
 end
 
 local function trim_suffix_to_budget(suffix, budget)
 	if budget <= 0 then
-		return ""
+		return "", suffix ~= ""
 	end
 	if char_len(suffix) <= budget then
-		return suffix
+		return suffix, false
 	end
 
 	local trimmed = char_part(suffix, 0, budget)
@@ -74,9 +74,9 @@ local function trim_suffix_to_budget(suffix, budget)
 		search_start = newline + 1
 	end
 	if last_newline and last_newline > 1 then
-		return trimmed:sub(1, last_newline - 1)
+		return trimmed:sub(1, last_newline - 1), true
 	end
-	return trimmed
+	return trimmed, true
 end
 
 local function apply_budget(prefix, suffix, opts)
@@ -85,7 +85,7 @@ local function apply_budget(prefix, suffix, opts)
 	local suffix_len = char_len(suffix)
 
 	if prefix_len + suffix_len <= max_chars then
-		return prefix, suffix
+		return prefix, suffix, false, false
 	end
 
 	local prefix_budget = math.floor(max_chars * opts.prefix_ratio)
@@ -99,7 +99,9 @@ local function apply_budget(prefix, suffix, opts)
 		suffix_budget = suffix_len
 	end
 
-	return trim_prefix_to_budget(prefix, prefix_budget), trim_suffix_to_budget(suffix, suffix_budget)
+	local trimmed_prefix, prefix_truncated = trim_prefix_to_budget(prefix, prefix_budget)
+	local trimmed_suffix, suffix_truncated = trim_suffix_to_budget(suffix, suffix_budget)
+	return trimmed_prefix, trimmed_suffix, prefix_truncated, suffix_truncated
 end
 
 local fallback_commentstrings = {
@@ -146,18 +148,32 @@ local function get_filepath(bufnr)
 	return name ~= "" and vim.fn.fnamemodify(name, ":p") or ""
 end
 
-local function add_filepath_context(result, bufnr, opts)
-	if not opts.include_filepath then
-		return result
+local function add_comment_hints(result, bufnr, opts, prefix_truncated, suffix_truncated)
+	local prefix_hints = {}
+	if opts.include_filepath then
+		local filepath = get_filepath(bufnr)
+		if filepath ~= "" then
+			result.filepath = filepath
+			table.insert(prefix_hints, comment_line(bufnr, filepath))
+		end
 	end
 
-	local filepath = get_filepath(bufnr)
-	if filepath == "" then
-		return result
+	if prefix_truncated then
+		table.insert(prefix_hints, comment_line(bufnr, "…"))
 	end
 
-	result.filepath = filepath
-	result.prefix = comment_line(bufnr, filepath) .. "\n" .. (result.prefix or "")
+	if #prefix_hints > 0 then
+		result.prefix = table.concat(prefix_hints, "\n") .. "\n" .. (result.prefix or "")
+	end
+
+	if suffix_truncated then
+		local suffix = result.suffix or ""
+		if suffix ~= "" then
+			suffix = suffix .. "\n"
+		end
+		result.suffix = suffix .. comment_line(bufnr, "…")
+	end
+
 	return result
 end
 
@@ -184,7 +200,7 @@ function M.extract_context(bufnr, cursor_row, cursor_col, opts)
 
 	-- Validate cursor position
 	if cursor_row < 0 or cursor_row > total_lines - 1 then
-		local empty_context = add_filepath_context({ prefix = "", suffix = "" }, bufnr, opts)
+		local empty_context = add_comment_hints({ prefix = "", suffix = "" }, bufnr, opts, false, false)
 		context_cache = {
 			bufnr = bufnr,
 			cursor_row = cursor_row,
@@ -254,12 +270,13 @@ function M.extract_context(bufnr, cursor_row, cursor_col, opts)
 	end
 
 	local suffix = table.concat(suffix_lines, "\n")
-	prefix, suffix = apply_budget(prefix, suffix, opts)
+	local prefix_truncated, suffix_truncated
+	prefix, suffix, prefix_truncated, suffix_truncated = apply_budget(prefix, suffix, opts)
 
-	local result = add_filepath_context({
+	local result = add_comment_hints({
 		prefix = prefix,
 		suffix = suffix,
-	}, bufnr, opts)
+	}, bufnr, opts, prefix_truncated, suffix_truncated)
 
 	-- Update cache
 	context_cache = {
