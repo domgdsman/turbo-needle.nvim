@@ -29,8 +29,7 @@ AI code completions for Neovim.
       context = {
         max_chars = 12000,
         prefix_ratio = 0.75,
-        include_filename = true,
-        include_language = true,
+        include_filepath = true,
       },
       postprocess = {
         enabled = true,
@@ -81,11 +80,11 @@ Additional request fields can be passed through `api.extra_body`, and provider-s
 
 Use `api.custom_template` for a literal prompt template. Custom templates must include `{prefix}` and `{suffix}` placeholders. `api.stop` defaults to `"auto"`, which sends stop tokens from the selected template. Set it to a string or list to add explicit stop tokens; duplicates are removed deterministically.
 
-Templates can also use `{filename}` and `{language}`. These values come from the current buffer name and `vim.bo.filetype` when `context.include_filename` and `context.include_language` are enabled.
+Templates can also use `{filepath}`. By default, turbo-needle prepends the full current buffer path to the prefix as a language-aware comment using `vim.bo.commentstring`, for example `-- /tmp/init.lua` in Lua or `# /tmp/example.py` in Python.
 
 ## Completion Context
 
-`context.max_chars` controls the total prefix plus suffix character budget sent to the completion provider. `context.prefix_ratio` controls how that budget is split when both sides exceed the limit; nearby cursor text is kept first, with older prefix text and farther suffix text truncated before local context. Filename and language metadata are included by default for contextual awareness and are also added to chat fallback prompts.
+`context.max_chars` controls the total prefix plus suffix character budget sent to the completion provider. `context.prefix_ratio` controls how that budget is split when both sides exceed the limit; nearby cursor text is kept first, with older prefix text and farther suffix text truncated before local context. Filepath context is included by default because it usually implies language, framework, and project location without adding a separate metadata block.
 
 ## Completion Postprocessing
 

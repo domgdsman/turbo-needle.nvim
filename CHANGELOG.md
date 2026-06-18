@@ -4,7 +4,7 @@
 
 - Add configurable completion context budgeting with prefix/suffix allocation.
 - Preserve nearby cursor context while trimming distant prefix and suffix text first.
-- Populate filename and language metadata for template rendering and chat fallback prompts.
+- Add a language-aware filepath comment hint to completion context and template rendering.
 
 ## v0.0.23
 

@@ -40,8 +40,7 @@ M.defaults = {
 	context = {
 		max_chars = 12000,
 		prefix_ratio = 0.75,
-		include_filename = true,
-		include_language = true,
+		include_filepath = true,
 	},
 	postprocess = {
 		enabled = true,
@@ -132,8 +131,7 @@ function M.validate(config)
 	validate("completions.debounce_ms", config.completions.debounce_ms, "number")
 	validate("context.max_chars", config.context.max_chars, "number")
 	validate("context.prefix_ratio", config.context.prefix_ratio, "number")
-	validate("context.include_filename", config.context.include_filename, "boolean")
-	validate("context.include_language", config.context.include_language, "boolean")
+	validate("context.include_filepath", config.context.include_filepath, "boolean")
 	if config.context.max_chars < 1 then
 		error("context.max_chars must be greater than 0", 0)
 	end

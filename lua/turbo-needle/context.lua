@@ -15,8 +15,7 @@ local CACHE_TTL_MS = 500 -- Cache validity time (increased from 100ms to 500ms)
 local default_options = {
 	max_chars = 12000,
 	prefix_ratio = 0.75,
-	include_filename = true,
-	include_language = true,
+	include_filepath = true,
 }
 
 local function normalize_options(opts)
@@ -27,8 +26,7 @@ local function cache_key_for_options(opts)
 	return table.concat({
 		tostring(opts.max_chars),
 		tostring(opts.prefix_ratio),
-		tostring(opts.include_filename),
-		tostring(opts.include_language),
+		tostring(opts.include_filepath),
 	}, "|")
 end
 
@@ -104,14 +102,62 @@ local function apply_budget(prefix, suffix, opts)
 	return trim_prefix_to_budget(prefix, prefix_budget), trim_suffix_to_budget(suffix, suffix_budget)
 end
 
-local function add_metadata(result, bufnr, opts)
-	if opts.include_filename then
-		local name = vim.api.nvim_buf_get_name(bufnr)
-		result.filename = name ~= "" and vim.fn.fnamemodify(name, ":t") or ""
+local fallback_commentstrings = {
+	c = "// %s",
+	cpp = "// %s",
+	cs = "// %s",
+	go = "// %s",
+	java = "// %s",
+	javascript = "// %s",
+	javascriptreact = "// %s",
+	jsonc = "// %s",
+	kotlin = "// %s",
+	lua = "-- %s",
+	php = "// %s",
+	python = "# %s",
+	ruby = "# %s",
+	rust = "// %s",
+	sh = "# %s",
+	sql = "-- %s",
+	swift = "// %s",
+	typescript = "// %s",
+	typescriptreact = "// %s",
+	vim = '" %s',
+	yaml = "# %s",
+	zsh = "# %s",
+}
+
+local function get_commentstring(bufnr)
+	local commentstring = vim.bo[bufnr].commentstring
+	if type(commentstring) == "string" and commentstring:find("%%s") then
+		return commentstring
 	end
-	if opts.include_language then
-		result.language = vim.bo[bufnr].filetype or ""
+
+	local filetype = vim.bo[bufnr].filetype
+	return fallback_commentstrings[filetype] or "# %s"
+end
+
+local function comment_line(bufnr, text)
+	return string.format(get_commentstring(bufnr), text)
+end
+
+local function get_filepath(bufnr)
+	local name = vim.api.nvim_buf_get_name(bufnr)
+	return name ~= "" and vim.fn.fnamemodify(name, ":p") or ""
+end
+
+local function add_filepath_context(result, bufnr, opts)
+	if not opts.include_filepath then
+		return result
 	end
+
+	local filepath = get_filepath(bufnr)
+	if filepath == "" then
+		return result
+	end
+
+	result.filepath = filepath
+	result.prefix = comment_line(bufnr, filepath) .. "\n" .. (result.prefix or "")
 	return result
 end
 
@@ -138,7 +184,7 @@ function M.extract_context(bufnr, cursor_row, cursor_col, opts)
 
 	-- Validate cursor position
 	if cursor_row < 0 or cursor_row > total_lines - 1 then
-		local empty_context = add_metadata({ prefix = "", suffix = "" }, bufnr, opts)
+		local empty_context = add_filepath_context({ prefix = "", suffix = "" }, bufnr, opts)
 		context_cache = {
 			bufnr = bufnr,
 			cursor_row = cursor_row,
@@ -210,7 +256,7 @@ function M.extract_context(bufnr, cursor_row, cursor_col, opts)
 	local suffix = table.concat(suffix_lines, "\n")
 	prefix, suffix = apply_budget(prefix, suffix, opts)
 
-	local result = add_metadata({
+	local result = add_filepath_context({
 		prefix = prefix,
 		suffix = suffix,
 	}, bufnr, opts)

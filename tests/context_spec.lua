@@ -88,8 +88,7 @@ describe("turbo-needle.context", function()
 			local result = context.extract_context(bufnr, 3, 6, {
 				max_chars = 32,
 				prefix_ratio = 0.5,
-				include_filename = false,
-				include_language = false,
+				include_filepath = false,
 			})
 
 			assert.matches("cursor$", result.prefix)
@@ -115,14 +114,12 @@ describe("turbo-needle.context", function()
 			local even = context.extract_context(bufnr, 3, 3, {
 				max_chars = 14,
 				prefix_ratio = 0.5,
-				include_filename = false,
-				include_language = false,
+				include_filepath = false,
 			})
 			local prefix_heavy = context.extract_context(bufnr, 3, 3, {
 				max_chars = 14,
 				prefix_ratio = 0.75,
-				include_filename = false,
-				include_language = false,
+				include_filepath = false,
 			})
 
 			assert.are.equal("a3\ncur", even.prefix)
@@ -141,8 +138,7 @@ describe("turbo-needle.context", function()
 				context = {
 					max_chars = 12000,
 					prefix_ratio = 0.75,
-					include_filename = true,
-					include_language = true,
+					include_filepath = true,
 				},
 			})
 
@@ -155,20 +151,20 @@ describe("turbo-needle.context", function()
 			})
 			vim.api.nvim_set_current_buf(bufnr)
 			vim.bo[bufnr].filetype = "lua"
+			vim.bo[bufnr].commentstring = "-- %s"
 			vim.api.nvim_win_set_cursor(0, { 2, 6 })
 
 			local result = context.get_current_context()
 
-			assert.are.equal("local x = 1\nprint(", result.prefix)
+			assert.are.equal("-- /tmp/turbo-needle-context.lua\nlocal x = 1\nprint(", result.prefix)
 			assert.are.equal("x)", result.suffix)
-			assert.are.equal("turbo-needle-context.lua", result.filename)
-			assert.are.equal("lua", result.language)
+			assert.are.equal("/tmp/turbo-needle-context.lua", result.filepath)
 
 			vim.api.nvim_set_current_buf(previous_buf)
 			vim.api.nvim_buf_delete(bufnr, { force = true })
 		end)
 
-		it("should render filename and language placeholders from real context", function()
+		it("should render filepath placeholders from real context", function()
 			local turbo_needle = require("turbo-needle")
 			turbo_needle.setup()
 
@@ -181,14 +177,18 @@ describe("turbo-needle.context", function()
 			})
 			vim.api.nvim_set_current_buf(bufnr)
 			vim.bo[bufnr].filetype = "lua"
+			vim.bo[bufnr].commentstring = "-- %s"
 			vim.api.nvim_win_set_cursor(0, { 1, 14 })
 
 			local ctx = context.get_current_context()
 			local rendered = templates.render({
-				prompt = "file={filename} lang={language} {prefix}<hole>{suffix}",
+				prompt = "path={filepath}\n{prefix}<hole>{suffix}",
 			}, ctx)
 
-			assert.are.equal("file=template-context.lua lang=lua local value <hole>=\nprint(value)", rendered)
+			assert.are.equal(
+				"path=/tmp/template-context.lua\n-- /tmp/template-context.lua\nlocal value <hole>=\nprint(value)",
+				rendered
+			)
 
 			vim.api.nvim_set_current_buf(previous_buf)
 			vim.api.nvim_buf_delete(bufnr, { force = true })

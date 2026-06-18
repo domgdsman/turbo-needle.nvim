@@ -82,34 +82,28 @@ describe("turbo-needle.templates", function()
 		it("renders custom templates with structured fields", function()
 			local template = templates.resolve({
 				model = "qwen",
-				custom_template = "before {prefix} middle {suffix} lang {language} file {filename}",
+				custom_template = "before {prefix} middle {suffix} path {filepath}",
 			})
 
 			assert.are.equal(
-				"before a middle b lang lua file init.lua",
+				"before a middle b path /tmp/init.lua",
 				templates.render(template, {
 					prefix = "a",
 					suffix = "b",
-					language = "lua",
-					filename = "init.lua",
+					filepath = "/tmp/init.lua",
 				})
 			)
 		end)
 	end)
 
 	describe("chat_messages", function()
-		it("includes filename and language metadata when present", function()
+		it("uses prefix and suffix without separate metadata headers", function()
 			local messages = templates.chat_messages({
 				prefix = "local x = ",
 				suffix = "\nprint(x)",
-				filename = "init.lua",
-				language = "lua",
 			})
 
-			assert.are.equal(
-				"Filename: init.lua\nLanguage: lua\n\nPrefix:\nlocal x = \n\nSuffix:\n\nprint(x)",
-				messages[2].content
-			)
+			assert.are.equal("Prefix:\nlocal x = \n\nSuffix:\n\nprint(x)", messages[2].content)
 		end)
 	end)
 

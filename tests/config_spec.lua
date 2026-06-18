@@ -42,8 +42,7 @@ describe("turbo-needle.config", function()
 			local context = config.defaults.context
 			assert.are.equal(12000, context.max_chars)
 			assert.are.equal(0.75, context.prefix_ratio)
-			assert.is_true(context.include_filename)
-			assert.is_true(context.include_language)
+			assert.is_true(context.include_filepath)
 		end)
 
 		it("should have default postprocess settings", function()
@@ -192,8 +191,7 @@ describe("turbo-needle.config", function()
 			local valid = vim.deepcopy(config.defaults)
 			valid.context.max_chars = 6000
 			valid.context.prefix_ratio = 0.6
-			valid.context.include_filename = false
-			valid.context.include_language = true
+			valid.context.include_filepath = false
 			assert.is_true(config.validate(valid))
 
 			local invalid_max_chars = vim.deepcopy(config.defaults)
@@ -209,7 +207,7 @@ describe("turbo-needle.config", function()
 			end)
 
 			local invalid_metadata = vim.deepcopy(config.defaults)
-			invalid_metadata.context.include_filename = "yes"
+			invalid_metadata.context.include_filepath = "yes"
 			assert.has_error(function()
 				config.validate(invalid_metadata)
 			end)
