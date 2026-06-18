@@ -156,6 +156,28 @@ describe("turbo-needle.context", function()
 
 			vim.api.nvim_buf_delete(bufnr, { force = true })
 		end)
+
+		it("should reallocate unused prefix budget to suffix near the top of the file", function()
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+				"line1",
+				"line2",
+				"line3",
+				"line4",
+				"line5",
+			})
+
+			local result = context.extract_context(bufnr, 0, 0, {
+				max_chars = 24,
+				prefix_ratio = 0.75,
+				include_filepath = false,
+			})
+
+			assert.are.equal("", result.prefix)
+			assert.are.equal("line1\nline2\nline3\nline4\n# …", result.suffix)
+
+			vim.api.nvim_buf_delete(bufnr, { force = true })
+		end)
 	end)
 
 	describe("get_current_context", function()
