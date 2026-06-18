@@ -93,6 +93,9 @@ function M.setup_completion_trigger()
 		get_state = get_buf_state,
 		complete = M.complete,
 		clear_ghost = M.clear_ghost_text,
+		sync_ghost = function()
+			return ghost.sync_with_typed_text(get_buf_state())
+		end,
 		is_enabled = function()
 			return enabled
 		end,

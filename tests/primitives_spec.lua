@@ -187,15 +187,135 @@ describe("turbo-needle extracted primitives", function()
 			ghost.set(state, "completion")
 
 			assert.are.equal("completion", state.cached_completion)
+			assert.are.equal("completion", state.original_completion)
 			assert.are.same({ row = 0, col = 2 }, state.cursor_position)
+			assert.are.same({ row = 0, col = 2 }, state.original_cursor_position)
 			assert.are.same({ ns_id = 88, id = 99 }, state.current_extmark)
 
 			ghost.clear(state)
 
 			assert.stub(del_stub).was_called_with(0, 88, 99)
 			assert.is_nil(state.cached_completion)
+			assert.is_nil(state.original_completion)
 			assert.is_nil(state.cursor_position)
+			assert.is_nil(state.original_cursor_position)
 			assert.is_nil(state.current_extmark)
+		end)
+
+		it("syncs matching typed text to the remaining completion", function()
+			vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return" })
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			stub(vim.api, "nvim_create_namespace").returns(88)
+			stub(vim.api, "nvim_buf_del_extmark")
+			local extmarks = {}
+			stub(vim.api, "nvim_buf_set_extmark").invokes(function(_, ns, row, col, opts)
+				table.insert(extmarks, { ns = ns, row = row, col = col, opts = opts })
+				return #extmarks
+			end)
+
+			local cursor = { 1, 6 }
+			stub(vim.api, "nvim_win_get_cursor").invokes(function()
+				return cursor
+			end)
+
+			local state = {}
+			ghost.set(state, " value")
+			vim.api.nvim_buf_set_text(0, 0, 6, 0, 6, { " v" })
+			cursor = { 1, 8 }
+
+			local synced = ghost.sync_with_typed_text(state)
+
+			assert.is_true(synced)
+			assert.are.equal("alue", state.cached_completion)
+			assert.are.equal(" value", state.original_completion)
+			assert.are.same({ row = 0, col = 8 }, state.cursor_position)
+			assert.are.equal("alue", extmarks[#extmarks].opts.virt_text[1][1])
+		end)
+
+		it("accepts only the remaining completion after typed-text sync", function()
+			vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return" })
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			stub(vim.api, "nvim_create_namespace").returns(88)
+			stub(vim.api, "nvim_buf_del_extmark")
+			stub(vim.api, "nvim_buf_set_extmark").returns(99)
+
+			local cursor = { 1, 6 }
+			stub(vim.api, "nvim_win_get_cursor").invokes(function()
+				return cursor
+			end)
+
+			local state = {}
+			ghost.set(state, " value")
+			vim.api.nvim_buf_set_text(0, 0, 6, 0, 6, { " v" })
+			cursor = { 1, 8 }
+
+			assert.is_true(ghost.sync_with_typed_text(state))
+			assert.are.equal("", ghost.accept(state, ghost.clear))
+			vim.wait(20)
+
+			assert.are.same({ "return value" }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+			assert.is_nil(state.cached_completion)
+		end)
+
+		it("returns false for mismatched typed text and leaves normal clearing to lifecycle", function()
+			vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return" })
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			stub(vim.api, "nvim_create_namespace").returns(88)
+			stub(vim.api, "nvim_buf_set_extmark").returns(99)
+
+			local cursor = { 1, 6 }
+			stub(vim.api, "nvim_win_get_cursor").invokes(function()
+				return cursor
+			end)
+
+			local state = {}
+			ghost.set(state, " value")
+			vim.api.nvim_buf_set_text(0, 0, 6, 0, 6, { " x" })
+			cursor = { 1, 8 }
+
+			assert.is_false(ghost.sync_with_typed_text(state))
+			assert.are.equal(" value", state.cached_completion)
+		end)
+
+		it("syncs multiline typed text and renders the remaining suffix", function()
+			vim.api.nvim_buf_set_lines(0, 0, -1, false, { "call()" })
+			stub(vim.api, "nvim_get_mode").returns({ mode = "i" })
+			stub(vim.api, "nvim_create_namespace").returns(88)
+			stub(vim.api, "nvim_buf_del_extmark")
+			local extmarks = {}
+			stub(vim.api, "nvim_buf_set_extmark").invokes(function(_, ns, row, col, opts)
+				table.insert(extmarks, { ns = ns, row = row, col = col, opts = opts })
+				return #extmarks
+			end)
+
+			local cursor = { 1, 6 }
+			stub(vim.api, "nvim_win_get_cursor").invokes(function()
+				return cursor
+			end)
+
+			local state = {}
+			ghost.set(state, "\n  next()\nend")
+			vim.api.nvim_buf_set_text(0, 0, 6, 0, 6, { "", "  " })
+			cursor = { 2, 2 }
+
+			local synced = ghost.sync_with_typed_text(state)
+
+			assert.is_true(synced)
+			assert.are.equal("next()\nend", state.cached_completion)
+			assert.are.same({ row = 1, col = 2 }, state.cursor_position)
+			assert.are.equal("next()", extmarks[#extmarks].opts.virt_text[1][1])
+			assert.are.equal("end", extmarks[#extmarks].opts.virt_lines[1][1][1])
+		end)
+
+		it("does not sync when the cursor moves before the original ghost position", function()
+			stub(vim.api, "nvim_win_get_cursor").returns({ 1, 3 })
+
+			local result = ghost.sync_with_typed_text({
+				original_completion = "text",
+				original_cursor_position = { row = 0, col = 4 },
+			})
+
+			assert.is_false(result)
 		end)
 
 		it("returns tab when accepting stale cursor state", function()
@@ -207,6 +327,56 @@ describe("turbo-needle extracted primitives", function()
 			}, function() end)
 
 			assert.are.equal("\t", result)
+		end)
+	end)
+
+	describe("lifecycle", function()
+		local lifecycle = require("turbo-needle.lifecycle")
+
+		it("does not clear, invalidate, or debounce when ghost sync succeeds", function()
+			stub(vim.api, "nvim_create_augroup").returns(1)
+
+			local cursor_moved_callback
+			stub(vim.api, "nvim_create_autocmd").invokes(function(events, opts)
+				if type(events) == "table" and vim.tbl_contains(events, "CursorMovedI") then
+					cursor_moved_callback = opts.callback
+				end
+			end)
+
+			local timer_created = false
+			stub(vim.loop, "new_timer").invokes(function()
+				timer_created = true
+			end)
+
+			local state = { request_counter = 3 }
+			local clear_calls = 0
+			local complete_calls = 0
+
+			lifecycle.setup({
+				config = { completions = { debounce_ms = 10 } },
+				get_state = function()
+					return state
+				end,
+				complete = function()
+					complete_calls = complete_calls + 1
+				end,
+				clear_ghost = function()
+					clear_calls = clear_calls + 1
+				end,
+				sync_ghost = function()
+					return true
+				end,
+				is_enabled = function()
+					return true
+				end,
+			})
+
+			cursor_moved_callback()
+
+			assert.are.equal(0, clear_calls)
+			assert.are.equal(0, complete_calls)
+			assert.are.equal(3, state.request_counter)
+			assert.is_false(timer_created)
 		end)
 	end)
 

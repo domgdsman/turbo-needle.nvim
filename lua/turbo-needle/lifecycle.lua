@@ -11,6 +11,7 @@ function M.setup(opts)
 	local get_state = opts.get_state
 	local complete = opts.complete
 	local clear_ghost = opts.clear_ghost
+	local sync_ghost = opts.sync_ghost
 	local is_enabled = opts.is_enabled
 
 	local function trigger_completion()
@@ -19,6 +20,10 @@ function M.setup(opts)
 		end
 
 		local state = get_state()
+		if sync_ghost and sync_ghost() then
+			return
+		end
+
 		clear_ghost()
 
 		if state.debounce_timer then

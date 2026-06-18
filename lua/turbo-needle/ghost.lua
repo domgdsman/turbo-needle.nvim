@@ -19,7 +19,7 @@ local function is_stale_extmark_error(err)
 	return msg:match("invalid") and (msg:match("extmark") or msg:match("namespace") or msg:match("ns_id"))
 end
 
-function M.clear(state)
+local function clear_extmark(state)
 	if state.current_extmark then
 		local ok, err = pcall(vim.api.nvim_buf_del_extmark, 0, state.current_extmark.ns_id, state.current_extmark.id)
 		if not ok and not is_stale_extmark_error(err) then
@@ -27,36 +27,19 @@ function M.clear(state)
 		end
 		state.current_extmark = nil
 	end
-
-	state.cached_completion = nil
-	state.cursor_position = nil
 end
 
-function M.set(state, text)
-	if vim.api.nvim_get_mode().mode ~= "i" then
-		return
-	end
-
-	M.clear(state)
-
+local function render(state, text, position)
 	if not text or text == "" or type(text) ~= "string" then
-		return
+		return false
 	end
 
-	state.cached_completion = text
-
-	local cursor = vim.api.nvim_win_get_cursor(0)
-	if not cursor or #cursor < 2 then
-		return
-	end
-
-	local row, col = cursor[1] - 1, cursor[2]
-	state.cursor_position = { row = row, col = col }
+	local row, col = position.row, position.col
 
 	if text:find("\n") then
 		local lines = vim.split(text, "\n", { plain = true })
 		if #lines == 0 then
-			return
+			return false
 		end
 
 		local max_lines = 10
@@ -94,10 +77,10 @@ function M.set(state, text)
 		})
 		if not ok then
 			logger.error("Failed to set multi-line hybrid ghost")
-			return
+			return false
 		end
 		state.current_extmark = { ns_id = ns_id, id = id }
-		return
+		return true
 	end
 
 	local ns_id = namespace()
@@ -108,9 +91,91 @@ function M.set(state, text)
 	})
 	if not ok then
 		logger.error("Failed to set ghost text extmark")
-		return
+		return false
 	end
 	state.current_extmark = { ns_id = ns_id, id = id }
+	return true
+end
+
+function M.clear(state)
+	clear_extmark(state)
+
+	state.cached_completion = nil
+	state.original_completion = nil
+	state.cursor_position = nil
+	state.original_cursor_position = nil
+end
+
+function M.set(state, text)
+	if vim.api.nvim_get_mode().mode ~= "i" then
+		return
+	end
+
+	M.clear(state)
+
+	if not text or text == "" or type(text) ~= "string" then
+		return
+	end
+
+	state.cached_completion = text
+	state.original_completion = text
+
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	if not cursor or #cursor < 2 then
+		return
+	end
+
+	local row, col = cursor[1] - 1, cursor[2]
+	state.cursor_position = { row = row, col = col }
+	state.original_cursor_position = { row = row, col = col }
+
+	render(state, text, state.cursor_position)
+end
+
+function M.sync_with_typed_text(state)
+	if not state.original_completion or not state.original_cursor_position then
+		return false
+	end
+
+	local current_cursor = vim.api.nvim_win_get_cursor(0)
+	if not current_cursor or #current_cursor < 2 then
+		return false
+	end
+
+	local current_position = { row = current_cursor[1] - 1, col = current_cursor[2] }
+	local original = state.original_cursor_position
+	if current_position.row < original.row then
+		return false
+	end
+	if current_position.row == original.row and current_position.col < original.col then
+		return false
+	end
+
+	local ok, typed_lines =
+		pcall(vim.api.nvim_buf_get_text, 0, original.row, original.col, current_position.row, current_position.col, {})
+	if not ok or not typed_lines then
+		return false
+	end
+
+	local typed_text = table.concat(typed_lines, "\n")
+	if typed_text == "" then
+		return true
+	end
+
+	if state.original_completion:sub(1, #typed_text) ~= typed_text then
+		return false
+	end
+
+	local remaining = state.original_completion:sub(#typed_text + 1)
+	clear_extmark(state)
+	if remaining == "" then
+		M.clear(state)
+		return true
+	end
+
+	state.cached_completion = remaining
+	state.cursor_position = current_position
+	return render(state, remaining, current_position)
 end
 
 function M.accept(state, clear)
