@@ -150,6 +150,46 @@ describe("turbo-needle.postprocess", function()
 		assert.are.equal("  return value", result)
 	end)
 
+	it("reconciles completion indentation with whitespace already before the cursor", function()
+		local result = postprocess.apply("    if ready then\n      run()\n    end", {
+			config = {},
+			prefix = "function main()\n    ",
+			suffix = "",
+		})
+
+		assert.are.equal("if ready then\n      run()\n    end", result)
+	end)
+
+	it("adds the current indentation to relatively indented continuation lines", function()
+		local result = postprocess.apply("if ready then\n  run()\nend", {
+			config = {},
+			prefix = "function main()\n    ",
+			suffix = "",
+		})
+
+		assert.are.equal("if ready then\n      run()\n    end", result)
+	end)
+
+	it("preserves continuation lines that outdent past the completion baseline", function()
+		local result = postprocess.apply("    run()\n  end", {
+			config = {},
+			prefix = "  if ready then\n    ",
+			suffix = "",
+		})
+
+		assert.are.equal("run()\n  end", result)
+	end)
+
+	it("does not rewrite indentation after non-whitespace text", function()
+		local result = postprocess.apply("value\n  next()", {
+			config = {},
+			prefix = "local result = ",
+			suffix = "",
+		})
+
+		assert.are.equal("value\n  next()", result)
+	end)
+
 	it("caps multiline completions by configured lines and characters", function()
 		local by_lines = postprocess.apply("one\ntwo\nthree", {
 			config = { max_lines = 2 },

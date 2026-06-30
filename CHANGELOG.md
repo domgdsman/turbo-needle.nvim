@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.25
+
+- Reconcile completion indentation with whitespace already present before the cursor.
+- Preserve relative indentation in multiline completions during preview and acceptance.
+- Render the exact normalized completion text that will be inserted.
+
 ## v0.0.24
 
 - Add configurable completion context budgeting with prefix/suffix allocation.

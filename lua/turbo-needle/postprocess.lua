@@ -31,6 +31,44 @@ local function trim_trailing_whitespace(text)
 	return (text:gsub("%s+$", ""))
 end
 
+local function normalize_leading_indentation(text, prefix)
+	local current_line_prefix = (prefix or ""):match("([^\n]*)$") or ""
+	if current_line_prefix == "" or not current_line_prefix:match("^%s+$") then
+		return text
+	end
+
+	local lines = vim.split(text, "\n", { plain = true })
+	local baseline
+	for _, line in ipairs(lines) do
+		if line:match("%S") then
+			baseline = line:match("^(%s*)") or ""
+			break
+		end
+	end
+	if baseline == nil then
+		return text
+	end
+
+	for index, line in ipairs(lines) do
+		if line:match("%S") then
+			local relative = line
+			local has_baseline = baseline == "" or line:sub(1, #baseline) == baseline
+			if baseline ~= "" and line:sub(1, #baseline) == baseline then
+				relative = line:sub(#baseline + 1)
+			end
+			if index == 1 then
+				lines[index] = relative
+			elseif has_baseline then
+				lines[index] = current_line_prefix .. relative
+			else
+				lines[index] = line
+			end
+		end
+	end
+
+	return table.concat(lines, "\n")
+end
+
 local function trim(text)
 	return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -212,6 +250,8 @@ function M.classify(raw_text, opts)
 			return result(nil, true, "stop_token_only", true)
 		end
 	end
+
+	text = normalize_leading_indentation(text, opts.prefix)
 
 	if cfg.trim_prefix_overlap ~= false then
 		local prefix = opts.prefix or ""

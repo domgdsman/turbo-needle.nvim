@@ -57,14 +57,8 @@ local function render(state, text, position)
 		local virt_lines = nil
 		if #tail > 0 then
 			virt_lines = {}
-			local current_line = vim.api.nvim_get_current_line()
-			local base_indent = (current_line and current_line:match("^%s*")) or ""
 			for _, line in ipairs(tail) do
-				local display_line = line
-				if line:match("^%s*") then
-					display_line = base_indent .. line:gsub("^%s*", "")
-				end
-				table.insert(virt_lines, { { truncate(display_line), "Comment" } })
+				table.insert(virt_lines, { { truncate(line), "Comment" } })
 			end
 		end
 

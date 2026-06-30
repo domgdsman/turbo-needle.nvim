@@ -26,8 +26,8 @@ describe("turbo-needle", function()
 
 	describe("setup", function()
 		it("should expose plugin version metadata", function()
-			assert.are.equal("0.0.24", turbo_needle.version)
-			assert.are.equal("0.0.24", turbo_needle._VERSION)
+			assert.are.equal("0.0.25", turbo_needle.version)
+			assert.are.equal("0.0.25", turbo_needle._VERSION)
 		end)
 
 		it("should setup with default configuration", function()
