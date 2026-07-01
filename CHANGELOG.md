@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.26
+
+- Add a `ContextManager` for budgeting and assembling additional context before the current-buffer FIM prefix.
+- Define the additional context source contract with priority, placement order, truncation, and ordered content parts.
+- Add per-source enablement, priority, and placement overrides under `context.sources`.
+
 ## v0.0.25
 
 - Reconcile completion indentation with whitespace already present before the cursor.

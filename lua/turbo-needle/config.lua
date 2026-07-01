@@ -42,6 +42,7 @@ M.defaults = {
 		prefix_ratio = 0.75,
 		include_filepath = true,
 		include_ellipsis = true,
+		sources = {},
 	},
 	postprocess = {
 		enabled = true,
@@ -134,6 +135,19 @@ function M.validate(config)
 	validate("context.prefix_ratio", config.context.prefix_ratio, "number")
 	validate("context.include_filepath", config.context.include_filepath, "boolean")
 	validate("context.include_ellipsis", config.context.include_ellipsis, "boolean")
+	validate("context.sources", config.context.sources, "table")
+	for source, source_config in pairs(config.context.sources) do
+		validate("context.sources." .. tostring(source), source_config, "table")
+		if source_config.enabled ~= nil then
+			validate("context.sources." .. tostring(source) .. ".enabled", source_config.enabled, "boolean")
+		end
+		if source_config.priority ~= nil then
+			validate("context.sources." .. tostring(source) .. ".priority", source_config.priority, "number")
+		end
+		if source_config.sort_order ~= nil then
+			validate("context.sources." .. tostring(source) .. ".sort_order", source_config.sort_order, "number")
+		end
+	end
 	if config.context.max_chars < 1 then
 		error("context.max_chars must be greater than 0", 0)
 	end
