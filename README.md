@@ -32,7 +32,14 @@ AI code completions for Neovim.
         include_filepath = true,
         include_ellipsis = true,
         sources = {
-          -- recently_opened = { enabled = true, priority = 80, sort_order = 20 },
+          recently_edited = {
+            enabled = true,
+            priority = 100,
+            sort_order = 10,
+            max_ranges = 3,
+            ttl_ms = 120000,
+            merge_adjacent = true,
+          },
         },
       },
       postprocess = {
@@ -103,6 +110,12 @@ The `ContextManager` can prepend additional context sources before the current-b
 ```
 
 The current buffer always receives budget first. Enabled additional sources are considered by descending `priority`, and each content part is included whole when it fits. Oversized parts are truncated only when `can_truncate` is true; otherwise they are skipped and collection continues. Selected sources are placed by ascending `sort_order`, with every content line converted to the active buffer's comment syntax. `context.sources.<source>` can disable a source or override its `priority` and `sort_order`.
+
+### Recently Edited Context
+
+Recently edited whole-line ranges are included as additional context by default. The source keeps the three newest ranges for two minutes, merges overlapping or adjacent edits in the same file, and excludes a range containing the active cursor because the current-buffer prefix and suffix already cover it. Configure it through `context.sources.recently_edited`; set `enabled = false` to disable collection.
+
+The underlying `ContextList` is an in-memory bounded list with exact-key replacement, newest-first ordering, optional TTL expiry, and ordered source-defined policies. Policies can mutate an incoming item and remove existing entries, which keeps range overlap behavior out of the generic storage primitive.
 
 ## Completion Postprocessing
 

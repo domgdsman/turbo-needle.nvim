@@ -42,7 +42,16 @@ M.defaults = {
 		prefix_ratio = 0.75,
 		include_filepath = true,
 		include_ellipsis = true,
-		sources = {},
+		sources = {
+			recently_edited = {
+				enabled = true,
+				priority = 100,
+				sort_order = 10,
+				max_ranges = 3,
+				ttl_ms = 120000,
+				merge_adjacent = true,
+			},
+		},
 	},
 	postprocess = {
 		enabled = true,
@@ -146,6 +155,17 @@ function M.validate(config)
 		end
 		if source_config.sort_order ~= nil then
 			validate("context.sources." .. tostring(source) .. ".sort_order", source_config.sort_order, "number")
+		end
+		if source == "recently_edited" then
+			validate("context.sources.recently_edited.max_ranges", source_config.max_ranges, "number")
+			validate("context.sources.recently_edited.ttl_ms", source_config.ttl_ms, "number")
+			validate("context.sources.recently_edited.merge_adjacent", source_config.merge_adjacent, "boolean")
+			if source_config.max_ranges < 1 then
+				error("context.sources.recently_edited.max_ranges must be greater than 0", 0)
+			end
+			if source_config.ttl_ms < 0 then
+				error("context.sources.recently_edited.ttl_ms must be greater than or equal to 0", 0)
+			end
 		end
 	end
 	if config.context.max_chars < 1 then
