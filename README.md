@@ -31,6 +31,9 @@ AI code completions for Neovim.
         prefix_ratio = 0.75,
         include_filepath = true,
         include_ellipsis = true,
+        sources = {
+          -- recently_opened = { enabled = true, priority = 80, sort_order = 20 },
+        },
       },
       postprocess = {
         enabled = true,
@@ -86,6 +89,20 @@ Templates can also use `{filepath}`. By default, turbo-needle prepends the full 
 ## Completion Context
 
 `context.max_chars` controls the total prefix plus suffix character budget sent to the completion provider. `context.prefix_ratio` controls how that budget is split when both sides exceed the limit; nearby cursor text is kept first, with older prefix text and farther suffix text truncated before local context. Filepath context is included by default because it usually implies language, framework, and project location without adding a separate metadata block.
+
+The `ContextManager` can prepend additional context sources before the current-buffer FIM prefix. A source has the following contract:
+
+```lua
+{
+  source = "recently_opened",
+  priority = 80,
+  sort_order = 20,
+  can_truncate = true,
+  content = { "first block", "second\nmultiline block" },
+}
+```
+
+The current buffer always receives budget first. Enabled additional sources are considered by descending `priority`, and each content part is included whole when it fits. Oversized parts are truncated only when `can_truncate` is true; otherwise they are skipped and collection continues. Selected sources are placed by ascending `sort_order`, with every content line converted to the active buffer's comment syntax. `context.sources.<source>` can disable a source or override its `priority` and `sort_order`.
 
 ## Completion Postprocessing
 

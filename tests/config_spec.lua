@@ -221,6 +221,22 @@ describe("turbo-needle.config", function()
 			end)
 		end)
 
+		it("should validate additional context source overrides", function()
+			local valid = vim.deepcopy(config.defaults)
+			valid.context.sources.recently_opened = {
+				enabled = true,
+				priority = 80,
+				sort_order = 20,
+			}
+			assert.is_true(config.validate(valid))
+
+			local invalid = vim.deepcopy(valid)
+			invalid.context.sources.recently_opened.priority = "high"
+			assert.has_error(function()
+				config.validate(invalid)
+			end)
+		end)
+
 		it("should validate stream when set", function()
 			assert.is_true(config.validate({
 				api = {

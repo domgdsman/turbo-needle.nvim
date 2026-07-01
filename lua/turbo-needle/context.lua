@@ -131,7 +131,7 @@ local fallback_commentstrings = {
 	zsh = "# %s",
 }
 
-local function get_commentstring(bufnr)
+function M.get_commentstring(bufnr)
 	local commentstring = vim.bo[bufnr].commentstring
 	if type(commentstring) == "string" and commentstring:find("%%s") then
 		return commentstring
@@ -142,7 +142,7 @@ local function get_commentstring(bufnr)
 end
 
 local function comment_line(bufnr, text)
-	return string.format(get_commentstring(bufnr), text)
+	return string.format(M.get_commentstring(bufnr), text)
 end
 
 local function get_filepath(bufnr)
@@ -294,7 +294,7 @@ function M.extract_context(bufnr, cursor_row, cursor_col, opts)
 end
 
 -- Get current cursor position and extract context
-function M.get_current_context()
+function M.get_current_context(additional_sources)
 	local bufnr = vim.api.nvim_get_current_buf()
 	local cursor = vim.api.nvim_win_get_cursor(0) -- Returns {row (1-based), col (0-based byte index)}
 
@@ -307,7 +307,13 @@ function M.get_current_context()
 	local turbo_needle = require("turbo-needle")
 	local config = turbo_needle.get_config()
 
-	return M.extract_context(bufnr, row, col, config.context)
+	local current = M.extract_context(bufnr, row, col, config.context)
+	local manager = require("turbo-needle.context_manager").new({
+		max_chars = config.context.max_chars,
+		commentstring = M.get_commentstring(bufnr),
+		sources = config.context.sources,
+	})
+	return manager:build(current, additional_sources)
 end
 
 -- Check if current file type is supported
