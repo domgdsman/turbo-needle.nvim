@@ -6,6 +6,7 @@ local keymaps = require("turbo-needle.keymaps")
 local lifecycle = require("turbo-needle.lifecycle")
 local logger = require("turbo-needle.logger")
 local postprocess = require("turbo-needle.postprocess")
+local recently_edited_source = require("turbo-needle.sources.recently_edited")
 local state_store = require("turbo-needle.state")
 local version = require("turbo-needle.version")
 
@@ -42,6 +43,7 @@ end
 
 -- Private config storage
 local _config = config.defaults
+local recently_edited = nil
 
 -- Public getter for config
 function M.get_config()
@@ -67,6 +69,11 @@ function M.setup(opts)
 	end
 
 	_config = next_config
+	if recently_edited then
+		recently_edited:close()
+	end
+	recently_edited = recently_edited_source.new(_config.context.sources.recently_edited)
+	recently_edited:setup()
 
 	-- Set up logging
 	logger.setup(M.get_config().logging)
@@ -130,7 +137,16 @@ function M.complete()
 		return
 	end
 
-	local ctx = context.get_current_context()
+	local bufnr = vim.api.nvim_get_current_buf()
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local additional_sources = {}
+	if recently_edited then
+		local edited_context = recently_edited:get_context(bufnr, cursor[1] - 1)
+		if edited_context then
+			table.insert(additional_sources, edited_context)
+		end
+	end
+	local ctx = context.get_current_context(additional_sources)
 	local api = require("turbo-needle.api")
 	local state = get_buf_state()
 	local cache_ctx = vim.tbl_extend("force", ctx, {

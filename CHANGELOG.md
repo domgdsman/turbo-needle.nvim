@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.27
+
+- Add a reusable bounded `ContextList` with TTL expiry, ordered policies, recency updates, and optional timer eviction.
+- Track and merge recently edited whole-line ranges through Neovim buffer events.
+- Include non-local recent edits as prioritized additional completion context.
+
 ## v0.0.26
 
 - Add a `ContextManager` for budgeting and assembling additional context before the current-buffer FIM prefix.
