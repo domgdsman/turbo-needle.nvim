@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.27
+
+- Handle reasoning-capable chat completion responses without rendering reasoning as ghost text.
+- Add `reasoning_only` diagnostics when a provider returns reasoning but no insertable completion content.
+
 ## v0.0.26
 
 - Add a `ContextManager` for budgeting and assembling additional context before the current-buffer FIM prefix.
