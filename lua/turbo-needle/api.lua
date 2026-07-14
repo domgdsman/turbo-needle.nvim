@@ -190,6 +190,14 @@ function M.get_completion(prompt_data, callback, api_key)
 	return M.request_completion(curl_args, callback)
 end
 
+local function first_choice(result)
+	if not result or not result.choices or not result.choices[1] then
+		return nil
+	end
+
+	return result.choices[1]
+end
+
 local function parse_completion_choice(result)
 	if not result then
 		return ""
@@ -200,6 +208,43 @@ local function parse_completion_choice(result)
 	end
 
 	return ""
+end
+
+local function parse_reasoning_choice(result)
+	local choice = first_choice(result)
+	if not choice then
+		return nil
+	end
+
+	if type(choice.reasoning) == "string" then
+		return choice.reasoning
+	end
+	if type(choice.reasoning_content) == "string" then
+		return choice.reasoning_content
+	end
+	if choice.message then
+		if type(choice.message.reasoning) == "string" then
+			return choice.message.reasoning
+		end
+		if type(choice.message.reasoning_content) == "string" then
+			return choice.message.reasoning_content
+		end
+	end
+	if choice.delta then
+		if type(choice.delta.reasoning) == "string" then
+			return choice.delta.reasoning
+		end
+		if type(choice.delta.reasoning_content) == "string" then
+			return choice.delta.reasoning_content
+		end
+	end
+
+	return nil
+end
+
+local function parse_finish_reason(result)
+	local choice = first_choice(result)
+	return choice and choice.finish_reason or nil
 end
 
 local function parse_chat_choice(result)
@@ -228,6 +273,20 @@ local function parse_llamacpp_infill(result)
 		return result.text
 	end
 	return parse_completion_choice(result)
+end
+
+function M.parse_response_metadata(result, provider_opts)
+	local text = M.parse_response(result, provider_opts)
+	local reasoning = parse_reasoning_choice(result)
+	local has_reasoning = type(reasoning) == "string" and reasoning ~= ""
+
+	return {
+		text = text,
+		reasoning = reasoning,
+		has_reasoning = has_reasoning,
+		finish_reason = parse_finish_reason(result),
+		reasoning_only = has_reasoning and (type(text) ~= "string" or text:match("^%s*$") ~= nil),
+	}
 end
 
 function M.parse_response(result, provider_opts)

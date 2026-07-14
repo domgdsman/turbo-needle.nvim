@@ -7,6 +7,15 @@ describe("turbo-needle.postprocess", function()
 		assert.is_nil(postprocess.apply(" \n\t", { config = {} }))
 	end)
 
+	it("classifies reasoning-only completions separately from whitespace", function()
+		local result = postprocess.classify("", { config = {}, has_reasoning = true })
+
+		assert.is_nil(result.text)
+		assert.is_true(result.rejected)
+		assert.are.equal("reasoning_only", result.reason)
+		assert.is_false(result.retryable)
+	end)
+
 	it("trims completion suffix that duplicates text after the cursor", function()
 		local result = postprocess.apply("bar)\nend", {
 			config = {},

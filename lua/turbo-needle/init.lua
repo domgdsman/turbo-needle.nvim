@@ -174,15 +174,23 @@ function M.complete()
 				end
 
 				-- Parse the completion text from API response
-				local raw_completion_text = api.parse_response(result, _config.api)
+				local response_metadata = api.parse_response_metadata(result, _config.api)
+				local raw_completion_text = response_metadata.text
 				local postprocess_result = postprocess.classify(raw_completion_text, {
 					config = _config.postprocess,
 					api = _config.api,
 					prefix = ctx.prefix,
 					suffix = ctx.suffix,
+					has_reasoning = response_metadata.has_reasoning,
 				})
 				local completion_text = postprocess_result.text
 				if not completion_text then
+					if postprocess_result.reason == "reasoning_only" then
+						logger.warn(
+							"response contained reasoning but no completion content; finish_reason="
+								.. tostring(response_metadata.finish_reason)
+						)
+					end
 					if should_retry_postprocess(postprocess_result, _config.postprocess.retry, attempt) then
 						state.active_request_id = request_id
 						request_completion(attempt + 1)
