@@ -68,6 +68,35 @@ describe("turbo-needle.transport", function()
 		end)
 	end)
 
+	describe("parse_stream_chunk", function()
+		it("should parse reasoning_content separately from content", function()
+			local chunk =
+				transport.parse_stream_chunk([[data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}]])
+
+			assert.are.equal("thinking", chunk.reasoning)
+			assert.is_nil(chunk.content)
+			assert.is_false(chunk.done)
+		end)
+
+		it("should parse reasoning separately from content", function()
+			local chunk = transport.parse_stream_chunk([[data: {"choices":[{"delta":{"reasoning":"thinking"}}]}]])
+
+			assert.are.equal("thinking", chunk.reasoning)
+			assert.is_nil(chunk.content)
+			assert.is_false(chunk.done)
+		end)
+
+		it("should parse content and finish reason", function()
+			local chunk = transport.parse_stream_chunk(
+				[[data: {"choices":[{"delta":{"content":"code"},"finish_reason":"length"}]}]]
+			)
+
+			assert.are.equal("code", chunk.content)
+			assert.are.equal("length", chunk.finish_reason)
+			assert.is_false(chunk.done)
+		end)
+	end)
+
 	describe("request", function()
 		local original_job
 		local original_schedule_wrap
@@ -169,6 +198,80 @@ describe("turbo-needle.transport", function()
 
 			assert.are.same({ "hel", "lo" }, chunks)
 			assert.are.equal("hello", result.choices[1].text)
+		end)
+
+		it("should accumulate streaming reasoning separately from completion content", function()
+			local chunks = {}
+			local result
+
+			transport.request({
+				url = "http://localhost",
+				headers = {},
+				body = { stream = true },
+				timeout = 5000,
+				stream = true,
+			}, {
+				on_chunk = function(text)
+					table.insert(chunks, text)
+				end,
+				on_done = function(err, decoded)
+					assert.is_nil(err)
+					result = decoded
+				end,
+			})
+
+			job_spec.on_stdout(nil, [[data: {"choices":[{"delta":{"reasoning_content":"think "}}]}]])
+			job_spec.on_stdout(nil, [[data: {"choices":[{"delta":{"reasoning":"more"}}]}]])
+			job_spec.on_stdout(nil, [[data: {"choices":[{"delta":{"content":"code"},"finish_reason":"stop"}]}]])
+			job_spec.on_stdout(nil, "data: [DONE]")
+			job_spec.on_exit({
+				result = function()
+					return {}
+				end,
+				stderr_result = function()
+					return {}
+				end,
+			}, 0)
+
+			assert.are.same({ "code" }, chunks)
+			assert.are.equal("code", result.choices[1].text)
+			assert.are.equal("think more", result.choices[1].reasoning)
+			assert.are.equal("stop", result.choices[1].finish_reason)
+		end)
+
+		it("should return reasoning-only streaming responses without ghost text content", function()
+			local result
+
+			transport.request({
+				url = "http://localhost",
+				headers = {},
+				body = { stream = true },
+				timeout = 5000,
+				stream = true,
+			}, {
+				on_done = function(err, decoded)
+					assert.is_nil(err)
+					result = decoded
+				end,
+			})
+
+			job_spec.on_stdout(
+				nil,
+				[[data: {"choices":[{"delta":{"reasoning_content":"thinking"},"finish_reason":"length"}]}]]
+			)
+			job_spec.on_stdout(nil, "data: [DONE]")
+			job_spec.on_exit({
+				result = function()
+					return {}
+				end,
+				stderr_result = function()
+					return {}
+				end,
+			}, 0)
+
+			assert.are.equal("", result.choices[1].text)
+			assert.are.equal("thinking", result.choices[1].reasoning)
+			assert.are.equal("length", result.choices[1].finish_reason)
 		end)
 	end)
 end)

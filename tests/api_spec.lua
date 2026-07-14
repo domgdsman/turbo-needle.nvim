@@ -202,5 +202,43 @@ describe("turbo-needle.api", function()
 				api.parse_response({ content = "native code" }, { mode = "llamacpp_infill" })
 			)
 		end)
+
+		it("should parse chat content while retaining reasoning metadata", function()
+			local metadata = api.parse_response_metadata({
+				choices = {
+					{ message = { reasoning_content = "thinking", content = "chat code" } },
+				},
+			}, { mode = "chat_fallback" })
+
+			assert.are.equal("chat code", metadata.text)
+			assert.are.equal("thinking", metadata.reasoning)
+			assert.is_true(metadata.has_reasoning)
+			assert.is_false(metadata.reasoning_only)
+
+			metadata = api.parse_response_metadata({
+				choices = {
+					{ message = { reasoning = "thinking", content = "chat code" } },
+				},
+			}, { mode = "chat_fallback" })
+
+			assert.are.equal("chat code", metadata.text)
+			assert.are.equal("thinking", metadata.reasoning)
+			assert.is_true(metadata.has_reasoning)
+			assert.is_false(metadata.reasoning_only)
+		end)
+
+		it("should identify non-streaming reasoning-only chat responses", function()
+			local metadata = api.parse_response_metadata({
+				choices = {
+					{ message = { reasoning_content = "thinking", content = "" }, finish_reason = "length" },
+				},
+			}, { mode = "chat_fallback" })
+
+			assert.are.equal("", metadata.text)
+			assert.are.equal("thinking", metadata.reasoning)
+			assert.is_true(metadata.has_reasoning)
+			assert.is_true(metadata.reasoning_only)
+			assert.are.equal("length", metadata.finish_reason)
+		end)
 	end)
 end)

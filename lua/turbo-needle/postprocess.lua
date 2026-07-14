@@ -227,6 +227,9 @@ function M.classify(raw_text, opts)
 		return result(nil, true, "empty", true)
 	end
 	if raw_text:match("^%s*$") then
+		if opts.has_reasoning then
+			return result(nil, true, "reasoning_only", false)
+		end
 		return result(nil, true, "whitespace", true)
 	end
 
@@ -285,6 +288,9 @@ function M.classify(raw_text, opts)
 	text = trim_trailing_whitespace(text)
 
 	if text == "" or text:match("^%s*$") then
+		if opts.has_reasoning then
+			return result(nil, true, "reasoning_only", false)
+		end
 		if thinking_stripped then
 			return result(nil, true, "thinking", true)
 		end

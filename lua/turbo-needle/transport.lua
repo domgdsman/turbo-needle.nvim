@@ -14,12 +14,20 @@ local function decode_json(str)
 	return nil, result
 end
 
-local function extract_choice_text(payload)
+local function first_choice(payload)
 	if not payload or not payload.choices or not payload.choices[1] then
 		return nil
 	end
 
-	local choice = payload.choices[1]
+	return payload.choices[1]
+end
+
+local function extract_choice_text(payload)
+	local choice = first_choice(payload)
+	if not choice then
+		return nil
+	end
+
 	if type(choice.text) == "string" then
 		return choice.text
 	end
@@ -31,6 +39,74 @@ local function extract_choice_text(payload)
 	end
 
 	return nil
+end
+
+local function extract_stream_chunk(payload)
+	local choice = first_choice(payload)
+	if not choice then
+		return {
+			done = false,
+		}
+	end
+
+	local chunk = {
+		content = nil,
+		reasoning = nil,
+		done = false,
+		finish_reason = choice.finish_reason,
+	}
+
+	if type(choice.text) == "string" then
+		chunk.content = choice.text
+	end
+	if choice.delta then
+		if type(choice.delta.content) == "string" then
+			chunk.content = choice.delta.content
+		end
+		if type(choice.delta.reasoning) == "string" then
+			chunk.reasoning = choice.delta.reasoning
+		elseif type(choice.delta.reasoning_content) == "string" then
+			chunk.reasoning = choice.delta.reasoning_content
+		end
+	end
+
+	return chunk
+end
+
+function M.parse_stream_chunk(line)
+	if type(line) ~= "string" then
+		return {
+			done = false,
+		}
+	end
+
+	local data = line:match("^%s*data:%s*(.*)$")
+	if not data then
+		return {
+			done = false,
+		}
+	end
+
+	data = trim(data)
+	if data == "" then
+		return {
+			done = false,
+		}
+	end
+	if data == "[DONE]" then
+		return {
+			done = true,
+		}
+	end
+
+	local payload = decode_json(data)
+	if not payload then
+		return {
+			done = false,
+		}
+	end
+
+	return extract_stream_chunk(payload)
 end
 
 function M.parse_stream_line(line)
@@ -112,7 +188,9 @@ end
 
 function M.request(request, callbacks)
 	callbacks = callbacks or {}
-	local chunks = {}
+	local content_chunks = {}
+	local reasoning_chunks = {}
+	local finish_reason
 
 	local job = Job:new({
 		command = "curl",
@@ -122,14 +200,20 @@ function M.request(request, callbacks)
 				return
 			end
 
-			local text, done = M.parse_stream_line(data)
-			if text then
-				table.insert(chunks, text)
+			local chunk = M.parse_stream_chunk(data)
+			if chunk.content then
+				table.insert(content_chunks, chunk.content)
 				if callbacks.on_chunk then
-					callbacks.on_chunk(text)
+					callbacks.on_chunk(chunk.content)
 				end
 			end
-			if done and callbacks.on_stream_done then
+			if chunk.reasoning then
+				table.insert(reasoning_chunks, chunk.reasoning)
+			end
+			if chunk.finish_reason then
+				finish_reason = chunk.finish_reason
+			end
+			if chunk.done and callbacks.on_stream_done then
 				callbacks.on_stream_done()
 			end
 		end),
@@ -143,7 +227,9 @@ function M.request(request, callbacks)
 				callbacks.on_done(nil, {
 					choices = {
 						{
-							text = table.concat(chunks),
+							text = table.concat(content_chunks),
+							reasoning = table.concat(reasoning_chunks),
+							finish_reason = finish_reason,
 						},
 					},
 				})
